@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}SMS Gate{% endblock %}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 0; background: #f5f5f5; }
+    .header { background: #333; color: #fff; padding: 0.75rem 1.5rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; }
+    .header a { color: #fff; text-decoration: none; }
+    .header a:hover { text-decoration: underline; }
+    .nav { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .main { max-width: 960px; margin: 0 auto; padding: 1.5rem; }
+    .card { background: #fff; border-radius: 6px; padding: 1.25rem; margin-bottom: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .device-account { background: #f0f7ff; border: 1px solid #b3d7ff; border-radius: 4px; padding: 0.75rem 1rem; margin-bottom: 1rem; font-size: 0.9rem; }
+    .device-account form { display: flex; gap: 0.5rem; align-items: flex-end; flex-wrap: wrap; }
+    .device-account label { display: block; font-weight: 500; margin-bottom: 0.25rem; }
+    .device-account input { padding: 0.4rem 0.5rem; border: 1px solid #ccc; border-radius: 4px; }
+    .device-account button { padding: 0.4rem 0.75rem; background: #333; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+    .message { padding: 0.5rem; border-radius: 4px; margin-top: 0.5rem; }
+    .message.error { background: #ffebee; color: #c62828; }
+    .message.success { background: #e8f5e9; color: #2e7d32; }
+    .message.warn { background: #fff3e0; color: #e65100; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 0.5rem; text-align: left; border-bottom: 1px solid #eee; }
+    th { font-weight: 600; color: #444; }
+    button, .btn { padding: 0.5rem 1rem; border-radius: 4px; cursor: pointer; font-size: 0.9rem; border: none; text-decoration: none; display: inline-block; }
+    button.primary, .btn.primary { background: #333; color: #fff; }
+    button.danger { background: #c62828; color: #fff; }
+    button:hover, .btn:hover { opacity: 0.9; }
+    label { display: block; margin-top: 0.75rem; font-weight: 500; }
+    input, textarea, select { width: 100%; max-width: 400px; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; }
+    textarea { min-height: 80px; resize: vertical; }
+    .hint { font-size: 0.85rem; color: #666; margin-top: 0.25rem; }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="nav">
+      <a href="{{ url_for('dashboard') }}">Dashboard</a>
+      <a href="{{ url_for('send_sms_page') }}">Send SMS</a>
+      <a href="{{ url_for('devices_page') }}">Devices</a>
+      <a href="{{ url_for('messages_page') }}">Messages</a>
+      <a href="{{ url_for('logs_page') }}">Logs</a>
+      <a href="{{ url_for('webhooks_page') }}">Webhooks</a>
+      <a href="{{ url_for('settings_page') }}">Settings</a>
+      <a href="{{ url_for('health_page') }}">Health</a>
+    </div>
+    <span>
+      {% if session.get('user') %}Logged in as <strong>{{ session.user }}</strong>{% endif %}
+      <a href="{{ url_for('logout') }}">Logout</a>
+    </span>
+  </header>
+  <main class="main">
+    <div class="device-account">
+      <strong>Device account</strong> (for API: devices, messages, logs, webhooks, settings)
+      <form method="post" action="{{ url_for('set_device_account') }}">
+        <input type="hidden" name="next" value="{{ request.url }}">
+        <div>
+          <label for="device_user">Device username</label>
+          <input type="text" id="device_user" name="device_user" placeholder="e.g. A1B2C3" value="{{ session.get('device_user') or '' }}">
+        </div>
+        <div>
+          <label for="device_pass">Device password</label>
+          <input type="password" id="device_pass" name="device_pass" placeholder="From Android app">
+        </div>
+        <div>
+          <button type="submit">Save</button>
+        </div>
+      </form>
+      {% if not session.get('device_user') %}<span class="message warn">Set credentials above to use Devices, Messages, Logs, Webhooks, Settings.</span>{% endif %}
+    </div>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

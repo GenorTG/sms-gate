@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Messages - SMS Gate{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Messages</h1>
+  {% if success %}<p class="message success">{{ success }}</p>{% endif %}
+  {% if error %}<p class="message error">{{ error }}</p>{% endif %}
+  <p>List and enqueue messages. Set device credentials above.</p>
+  {% if messages and messages|length > 0 %}
+  <table>
+    <thead>
+      <tr><th>ID</th><th>State</th><th>Created</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for m in messages %}
+      <tr>
+        <td>{{ m.id }}</td>
+        <td>{{ m.state or m.get('processingState') or '-' }}</td>
+        <td>{{ m.createdAt or m.get('createdAt') or '-' }}</td>
+        <td><a href="{{ url_for('message_detail', message_id=m.id) }}">Detail</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>No messages or fetch failed.</p>
+  {% endif %}
+</div>
+<div class="card">
+  <h2>Enqueue message</h2>
+  <form method="post" action="{{ url_for('messages_page') }}">
+    <input type="hidden" name="action" value="enqueue">
+    <label for="phone">Phone (E.164)</label>
+    <input type="text" id="phone" name="phone" placeholder="+48123456789" required>
+    <label for="text">Text</label>
+    <textarea id="text" name="text" required></textarea>
+    <button type="submit" class="primary">Enqueue</button>
+  </form>
+</div>
+{% endblock %}

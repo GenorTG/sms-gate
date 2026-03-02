@@ -57,6 +57,10 @@ services:
       - "4842:4842"
     environment:
       SMS_GATE_URL: http://server:3000
+      # Web UI admin login (leave unset to disable auth; set both + WEBUI_SECRET_KEY for production)
+      WEBUI_ADMIN_USER: ${WEBUI_ADMIN_USER:-}
+      WEBUI_ADMIN_PASSWORD: ${WEBUI_ADMIN_PASSWORD:-}
+      WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY:-}
     depends_on:
       - server
 

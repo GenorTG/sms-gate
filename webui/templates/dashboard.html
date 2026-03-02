@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - SMS Gate{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Dashboard</h1>
+  <p>Overview of your SMS Gate. Use the navigation above to manage devices, messages, logs, webhooks, and settings.</p>
+</div>
+<div class="card">
+  <h2>Quick links</h2>
+  <p><a href="{{ url_for('send_sms_page') }}">Send SMS</a> — Send a message using device credentials.</p>
+  <p><a href="{{ url_for('devices_page') }}">Devices</a> — List and remove registered devices.</p>
+  <p><a href="{{ url_for('messages_page') }}">Messages</a> — View and enqueue messages.</p>
+  <p><a href="{{ url_for('logs_page') }}">Logs</a> — View API logs (from/to filter).</p>
+  <p><a href="{{ url_for('webhooks_page') }}">Webhooks</a> — Manage webhooks.</p>
+  <p><a href="{{ url_for('settings_page') }}">Settings</a> — View and edit device settings.</p>
+  <p><a href="{{ url_for('health_page') }}">Health</a> — Server health status.</p>
+</div>
+{% endblock %}

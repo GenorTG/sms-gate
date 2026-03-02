@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Message {{ message_id }} - SMS Gate{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Message {{ message_id }}</h1>
+  {% if error %}<p class="message error">{{ error }}</p>{% endif %}
+  {% if detail_str %}
+  <pre style="background:#f5f5f5;padding:1rem;overflow:auto;">{{ detail_str }}</pre>
+  {% endif %}
+  <p><a href="{{ url_for('messages_page') }}">Back to messages</a></p>
+</div>
+{% endblock %}

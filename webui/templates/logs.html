@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Logs - SMS Gate{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Logs</h1>
+  {% if error %}<p class="message error">{{ error }}</p>{% endif %}
+  <form method="get" action="{{ url_for('logs_page') }}" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:1rem;">
+    <div>
+      <label for="from">From (ISO datetime)</label>
+      <input type="text" id="from" name="from" value="{{ request.args.get('from') or '' }}">
+    </div>
+    <div>
+      <label for="to">To (ISO datetime)</label>
+      <input type="text" id="to" name="to" value="{{ request.args.get('to') or '' }}">
+    </div>
+    <div><button type="submit" class="primary">Fetch logs</button></div>
+  </form>
+  {% if entries and entries|length > 0 %}
+  <table>
+    <thead>
+      <tr><th>Time</th><th>Level</th><th>Message</th></tr>
+    </thead>
+    <tbody>
+      {% for e in entries %}
+      <tr>
+        <td>{{ e.timestamp or e.get('timestamp') or '-' }}</td>
+        <td>{{ e.priority or e.get('priority') or '-' }}</td>
+        <td>{{ e.message or e.get('message') or '-' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>No log entries or set device credentials and use date range.</p>
+  {% endif %}
+</div>
+{% endblock %}

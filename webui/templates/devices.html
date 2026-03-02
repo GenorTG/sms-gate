@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Devices - SMS Gate{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Devices</h1>
+  {% if error %}<p class="message error">{{ error }}</p>{% endif %}
+  {% if devices and devices|length > 0 %}
+  <table>
+    <thead>
+      <tr><th>ID</th><th>Name</th><th>Created</th><th>Last seen</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for d in devices %}
+      <tr>
+        <td>{{ d.id }}</td>
+        <td>{{ d.name or '-' }}</td>
+        <td>{{ d.createdAt or '-' }}</td>
+        <td>{{ d.lastSeen or '-' }}</td>
+        <td>
+          <form method="post" action="{{ url_for('delete_device', device_id=d.id) }}" style="display:inline;" onsubmit="return confirm('Remove this device?');">
+            <button type="submit" class="btn danger">Remove</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>No devices or set device credentials above.</p>
+  {% endif %}
+</div>
+{% endblock %}

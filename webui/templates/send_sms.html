@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Send SMS - SMS Gate{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Send SMS</h1>
+  <p class="hint">Use device credentials (or the saved device account above).</p>
+  <form id="form">
+    <label for="user">Device username</label>
+    <input type="text" id="user" name="username" placeholder="e.g. A1B2C3" value="{{ session.get('device_user') or '' }}" required>
+    <label for="pass">Device password</label>
+    <input type="password" id="pass" name="password" placeholder="From Android app" required>
+    <label for="phone">Phone number (E.164)</label>
+    <input type="text" id="phone" name="phone" placeholder="+48123456789" required>
+    <label for="msg">Message</label>
+    <textarea id="msg" name="message" required></textarea>
+    <button type="submit" class="primary">Send SMS</button>
+  </form>
+  <div id="out" class="message" style="display:none;"></div>
+</div>
+<script>
+(function() {
+  var form = document.getElementById('form');
+  var out = document.getElementById('out');
+  form.onsubmit = async function(e) {
+    e.preventDefault();
+    out.style.display = 'none';
+    try {
+      var r = await fetch('/api/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: document.getElementById('user').value.trim(),
+          password: document.getElementById('pass').value,
+          phone: document.getElementById('phone').value.trim(),
+          message: document.getElementById('msg').value.trim()
+        })
+      });
+      var data = await r.json();
+      out.style.display = 'block';
+      out.className = 'message ' + (data.success ? 'success' : 'error');
+      out.textContent = data.success ? 'Message enqueued.' : (data.error || JSON.stringify(data));
+    } catch (err) {
+      out.style.display = 'block';
+      out.className = 'message error';
+      out.textContent = err.message || 'Request failed';
+    }
+  };
+})();
+</script>
+{% endblock %}

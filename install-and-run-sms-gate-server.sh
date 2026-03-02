@@ -26,21 +26,89 @@ check_prereqs() {
 # --- Main install ---
 check_prereqs
 
-# Detect if our stack is already running (containers from this compose project)
+# Detect if our stack is already running
+STACK_UP=false
 if docker compose ps 2>/dev/null | grep -q "Up"; then
+  STACK_UP=true
+fi
+
+if [[ "$STACK_UP" = true ]]; then
   echo "SMS Gate stack is already running."
-  read -rp "Redo install? This will stop and remove containers and volumes, then reinstall with current code. (y/N): " REDO
-  if [[ "${REDO,,}" = "y" || "${REDO,,}" = "yes" ]]; then
-    echo "Stopping and removing containers and volumes..."
-    docker compose down -v
-    echo "Done. Reinstalling..."
-  else
-    echo "Exiting. No changes made."
-    exit 0
-  fi
+  echo "  (U)pdate  — keep database, config, and .env; rebuild images and restart (no re-register phones, no data loss)"
+  echo "  (R)einstall — remove everything (containers + volumes), regenerate config and secrets, fresh install"
+  echo "  (N)othing — exit without changes"
+  read -rp "Choose [U/r/N]: " CHOICE
+  CHOICE="${CHOICE:-u}"
+  case "${CHOICE,,}" in
+    u)
+      echo ""
+      echo "=== Update (keep data & config) ==="
+      echo "Rebuilding images and restarting containers. config.yml, .env, and database are unchanged."
+      echo ""
+      docker compose build --no-cache
+      docker compose up -d
+      echo "Waiting for services (up to 60s)..."
+      for i in {1..60}; do
+        if curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:4841/health/ready 2>/dev/null | grep -q 200; then
+          echo ""
+          break
+        fi
+        sleep 1
+        printf "."
+      done
+      echo ""
+      echo "Recent logs:"
+      docker compose logs --tail=15
+      echo ""
+      echo "=== Update complete ==="
+      echo "  API:    http://localhost:4841"
+      echo "  Web UI: http://localhost:4842"
+      echo ""
+      exit 0
+      ;;
+    r)
+      echo "Stopping and removing containers and volumes..."
+      docker compose down -v
+      echo "Done. Reinstalling from scratch..."
+      ;;
+    *)
+      echo "Exiting. No changes made."
+      exit 0
+      ;;
+  esac
 elif [[ -f config.yml ]]; then
-  read -rp "config.yml already exists. Overwrite and reinstall? (y/N): " OVERWRITE
-  [[ "${OVERWRITE,,}" = "y" || "${OVERWRITE,,}" = "yes" ]] || exit 0
+  echo "config.yml already exists (stack not running)."
+  echo "  (S)tart — bring up existing stack (no overwrite)"
+  echo "  (O)verwrite — regenerate config and .env, then install from scratch"
+  echo "  (N)othing — exit"
+  read -rp "Choose [S/o/N]: " CHOICE
+  CHOICE="${CHOICE:-s}"
+  case "${CHOICE,,}" in
+    s)
+      echo ""
+      echo "Starting existing stack..."
+      docker compose up -d
+      echo "Waiting for services (up to 60s)..."
+      for i in {1..60}; do
+        if curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:4841/health/ready 2>/dev/null | grep -q 200; then
+          echo ""
+          break
+        fi
+        sleep 1
+        printf "."
+      done
+      echo ""
+      echo "Stack started. API: http://localhost:4841  Web UI: http://localhost:4842"
+      exit 0
+      ;;
+    o)
+      echo "Overwriting and reinstalling..."
+      ;;
+    *)
+      echo "Exiting."
+      exit 0
+      ;;
+  esac
 fi
 
 echo ""
@@ -62,18 +130,29 @@ DB_PASS="${DB_PASS:-root}"
 
 # 4. Write config.yml (sed with | delimiter to avoid breaking on / and + in JWT)
 cp config.example.yml config.yml
-# Escape & for sed replacement (safe for base64 and hex)
 escape_sed() { printf '%s' "$1" | sed 's/[&\]/\\&/g'; }
 apply_sed() { sed "s|$1|$2|g" config.yml > config.yml.tmp && mv config.yml.tmp config.yml; }
 apply_sed "your-db-password" "$(escape_sed "$DB_PASS")"
 apply_sed "your-private-token" "$(escape_sed "$PRIVATE_TOKEN")"
 apply_sed "your-jwt-secret-base64" "$(escape_sed "$JWT_SECRET")"
 
-# 5. Write .env (only DB password for compose; device credentials are not stored)
+# 5. Write .env and Web UI admin credentials (default username: admin)
 cat > .env << EOF
 DB_PASSWORD=$DB_PASS
 EOF
-echo "Created .env (DB password only; device credentials are entered in the Web UI or in each API request)."
+read -rp "Web UI admin username [admin]: " WEBUI_USER
+WEBUI_USER="${WEBUI_USER:-admin}"
+read -rsp "Web UI admin password (leave empty to disable login): " WEBUI_PASS
+echo ""
+if [[ -n "$WEBUI_USER" && -n "$WEBUI_PASS" ]]; then
+  WEBUI_SECRET=$(openssl rand -hex 24)
+  echo "WEBUI_ADMIN_USER=$WEBUI_USER" >> .env
+  echo "WEBUI_ADMIN_PASSWORD=$WEBUI_PASS" >> .env
+  echo "WEBUI_SECRET_KEY=$WEBUI_SECRET" >> .env
+  echo "Web UI login enabled (admin user: $WEBUI_USER). Save your password."
+else
+  echo "Web UI login disabled (no admin user set)."
+fi
 echo ""
 
 # 6. Build (no cache) and start stack
@@ -93,7 +172,6 @@ for i in {1..60}; do
 done
 echo ""
 
-# Show recent logs
 echo "Recent logs:"
 docker compose logs --tail=20
 echo ""
@@ -111,8 +189,8 @@ echo "Next steps:"
 echo "  1. Connect your Android app: Settings -> Cloud Server."
 echo "     API URL: your server URL + /api/mobile/v1 (e.g. https://your-host/api/mobile/v1)"
 echo "     Private token: (the token above)"
-echo "  2. To send SMS: open the Web UI (port 4842) or use the Zapier JavaScript block (see zapier/README.md)."
-echo "     Enter device Username and Password (from the app) and phone + message; credentials are not stored on the server."
+echo "  2. Open the Web UI: http://localhost:4842"
+echo "     If you set a Web UI admin user, log in first. Then set 'Device account' (sms-gate device username/password from the app) to use Devices, Messages, Logs, Webhooks, Settings. Send SMS works from the Web UI or via POST /api/send (public, for Zapier)."
 echo ""
-echo "Quick check from this host: curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4841/health/ready  (expect 200)"
+echo "Quick check: curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:4841/health/ready  (expect 200)"
 echo ""

@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Webhooks - SMS Gate{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>Webhooks</h1>
+  {% if success %}<p class="message success">{{ success }}</p>{% endif %}
+  {% if error %}<p class="message error">{{ error }}</p>{% endif %}
+  {% if webhooks and webhooks|length > 0 %}
+  <table>
+    <thead>
+      <tr><th>ID</th><th>URL</th><th>Events</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for w in webhooks %}
+      <tr>
+        <td>{{ w.get('id') or w.id }}</td>
+        <td>{{ w.get('url') or w.url or '-' }}</td>
+        <td>{{ (w.get('events') or w.events or [])|join(', ') or '-' }}</td>
+        <td>
+          <form method="post" action="{{ url_for('delete_webhook', webhook_id=w.get('id') or w.id) }}" style="display:inline;" onsubmit="return confirm('Delete this webhook?');">
+            <button type="submit" class="btn danger">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>No webhooks or set device credentials above.</p>
+  {% endif %}
+</div>
+<div class="card">
+  <h2>Add webhook</h2>
+  <form method="post" action="{{ url_for('webhooks_page') }}">
+    <input type="hidden" name="action" value="add">
+    <label for="url">URL</label>
+    <input type="url" id="url" name="url" required>
+    <label for="events">Events (comma-separated)</label>
+    <input type="text" id="events" name="events" placeholder="sms:received,sms:sent">
+    <button type="submit" class="primary">Add</button>
+  </form>
+</div>
+{% endblock %}

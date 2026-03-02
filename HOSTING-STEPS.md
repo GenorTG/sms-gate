@@ -33,14 +33,18 @@ Replace `<REPO_URL>` with your repo URL (e.g. `https://github.com/your-org/sms-g
 
 The script will:
 
-- If the SMS Gate stack is already running, ask whether to **redo install** (stop and remove containers and volumes, then reinstall with current code). Say `y` to refresh the stack after code changes.
-- Generate a JWT secret and a private token (and write them into config).
+- **If the stack is already running:** offer **(U)pdate** (keep database, config, and .env; rebuild images and restart — no re-registering phones, no data loss), **(R)einstall** (remove everything and do a fresh install), or **(N)othing**.
+- **If `config.yml` exists but the stack is not running:** offer **(S)tart** (bring up the existing stack), **(O)verwrite** (regenerate config and reinstall), or **(N)othing**.
+- On a fresh install: generate a JWT secret and a private token (and write them into config).
 - Ask for a database password (press Enter to use `root`).
-- Create `config.yml` and `.env` (no manual editing). Device credentials are not stored; you send them with each request (Web UI or Zapier).
+- Ask for **Web UI admin username** (default: `admin`; press Enter to use it) and **password** (leave empty to disable Web UI login; set both to require login).
+- Create `config.yml` and `.env`. When Web UI login is enabled, `WEBUI_SECRET_KEY` is generated and stored in `.env`.
 - Start the stack with `docker compose up -d` and wait until the server is up.
 - Print the **private token** and next steps.
 
-Save the private token shown at the end; you need it for the Android app. Do not skip this step or you will have to look it up in `config.yml` later.
+**Updating:** Run the script again and choose **Update**. Your database, `config.yml`, `.env`, and registered devices stay intact; only images are rebuilt and containers restarted.
+
+Save the private token shown at the end; you need it for the Android app. If you set a Web UI admin user, save that password; you will use it to log into the Web UI.
 
 ---
 
@@ -60,7 +64,7 @@ Save the private token shown at the end; you need it for the Android app. Do not
 
 ## 5. Verify
 
-- **Web UI**: Open `http://<MACHINE_IP>:4842` (or your public URL). Enter the device **Username** and **Password** (from the app), plus **phone** and **message**; submit. The SMS should be sent. You can optionally check "Remember username/password in this browser" to store them only in your browser (localStorage).
+- **Web UI**: Open `http://<MACHINE_IP>:4842` (or your public URL). If you set a Web UI admin user, log in first. Then set **Device account** (device username and password from the Android app) in the blue bar; this is used for Devices, Messages, Logs, Webhooks, Settings. Go to **Send SMS**, enter phone and message (device username is prefilled if set); submit. The SMS should be sent.
 - **API health**: On the server, run `curl http://localhost:4841/health/ready`; you should get JSON. The server also responds at `GET /` with version info.
 
 ---

@@ -1,10 +1,10 @@
 # SMS Gate
 
-Self-hosted [SMS Gateway for Android](https://docs.sms-gate.app/) private server plus a minimal Web UI and Zapier-friendly API for sending SMS.
+Self-hosted [SMS Gateway for Android](https://docs.sms-gate.app/) private server plus a **full Web UI control layer** and Zapier-friendly API.
 
 - **SMS Gateway**: Android app connects here; you send/receive SMS via the API.
-- **Web UI**: Form (device username, password, phone, message) on port 4842; credentials are not stored on the server.
-- **Zapier**: Copy-pastable JavaScript block (see [zapier/README.md](zapier/README.md)): set Web UI URL, device username, password, phone, and message in Zapier; credentials sent with each request.
+- **Web UI** (port 4842): Admin login (optional), then Dashboard, Send SMS, Devices, Messages, Logs, Webhooks, Settings, Health. Set "Device account" (sms-gate credentials from the app) in the Web UI to use API-backed pages. Credentials are stored only in your session.
+- **Zapier**: `POST /api/send` remains public; see [zapier/README.md](zapier/README.md).
 
 ## Quick start
 
@@ -16,10 +16,12 @@ Self-hosted [SMS Gateway for Android](https://docs.sms-gate.app/) private server
 
 The script generates secrets, creates `config.yml` and `.env`, starts the stack, and prints a **private token**. Use that token in the Android app (Settings → Cloud Server). To send SMS, open the Web UI and enter the device Username and Password (from the app) plus phone and message; credentials are not stored on the server.
 
+**Updating an existing install:** Run `./install-and-run-sms-gate-server.sh` and choose **Update (U)**. Database, config, and .env are kept; only images are rebuilt and containers restarted (no re-registering phones or losing SMS history).
+
 **Manual setup (alternative):**
 
 1. Copy `config.example.yml` to `config.yml`; set database password, `gateway.private_token`, and `jwt.secret` (e.g. `openssl rand -base64 32`).
-2. Create `.env` with `DB_PASSWORD` (for compose). Device credentials are not stored; enter them in the Web UI or in each API request.
+2. Create `.env` with `DB_PASSWORD`. Optionally set `WEBUI_ADMIN_USER`, `WEBUI_ADMIN_PASSWORD`, and `WEBUI_SECRET_KEY` (e.g. `openssl rand -hex 24`) to enable Web UI login.
 3. Run `docker compose up -d`. API: http://localhost:4841, Web UI: http://localhost:4842.
 
 ## Project layout
@@ -29,13 +31,15 @@ The script generates secrets, creates `config.yml` and `.env`, starts the stack,
 | `install-and-run-sms-gate-server.sh` | Interactive install: creates config and .env, starts stack; device credentials are entered in the Web UI |
 | `docker-compose.yml` | db, server (sms-gate), worker, webui |
 | `config.yml` | Server config (not in git; created by install script or from `config.example.yml`) |
-| `webui/` | Flask app: form + `POST /api/send`; Zapier uses the same API with a JS block |
+| `webui/` | Flask app: admin auth, Dashboard, Send SMS, Devices, Messages, Logs, Webhooks, Settings, Health; `POST /api/send` public for Zapier |
 | `zapier/README.md` | Copy-pastable Zapier blocks |
 
 ## Web UI (port 4842)
 
-- **GET /** – Form: (1) Device username and password (from Android app), with optional "Save in this browser for next time" (localStorage only); (2) Phone (E.164) and message. Credentials are not stored on the server. Served with gunicorn in production (no dev-server warning).
-- **POST /api/send** – JSON body: `{"username": "...", "password": "...", "phone": "+...", "message": "..."}`. All four required; credentials are used only for that request. Returns JSON success/error.
+- **Login**: If `WEBUI_ADMIN_USER` and `WEBUI_ADMIN_PASSWORD` are set, you must log in first. Set `WEBUI_SECRET_KEY` when using auth.
+- **Device account**: After login, set the "Device account" (sms-gate device username/password from the Android app) to use Devices, Messages, Logs, Webhooks, Settings. Stored in session only.
+- **Pages**: Dashboard, Send SMS, Devices (list/remove), Messages (list/detail/enqueue), Logs (from/to filter), Webhooks (list/add/delete), Settings (view/patch), Health.
+- **POST /api/send** – Public; JSON body: `{"username": "...", "password": "...", "phone": "+...", "message": "..."}`. For Zapier/scripts; credentials sent per request.
 
 ## Production
 
