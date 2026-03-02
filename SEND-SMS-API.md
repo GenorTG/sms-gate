@@ -69,18 +69,10 @@ curl -s "https://stealth-dragon.tail793f98.ts.net/api/3rdparty/v1/devices" \
 
 You can pass `"deviceId": "..."` in the POST `/messages` body to target that device.
 
-## 5. Using the helper script
+## 5. Web UI and Zapier
 
-From the project directory, with credentials in env:
-
-```bash
-export SMSGATE_BASE="https://stealth-dragon.tail793f98.ts.net/api/3rdparty/v1"
-export SMSGATE_USER="YOUR_DEVICE_USERNAME"
-export SMSGATE_PASS="YOUR_DEVICE_PASSWORD"
-./send-sms.sh "+79991234567" "Hello from the API!"
-```
-
-See [send-sms.sh](send-sms.sh) for the full script.
+- **Web UI**: Open the Web UI (port 4842), enter device username, password, phone, and message. Credentials are not stored on the server.
+- **Zapier**: Use the copy-pastable JavaScript block in [zapier/README.md](zapier/README.md) with variables `webuiUrl`, `username`, `password`, `phone`, `message`. Credentials are sent with each request.
 
 ## References
 

@@ -1,6 +1,6 @@
 """
-Minimal Web UI for SMS Gate: form (phone + message) and POST /api/send for Zapier.
-Uses SMS_GATE_URL, SMS_GATE_USER, SMS_GATE_PASS from env to get JWT and send via sms-gate API.
+Minimal Web UI for SMS Gate: form (device user, pass, phone, message) and POST /api/send.
+Credentials are never stored on the server; they are sent per request (form or API).
 """
 import os
 import re
@@ -11,19 +11,17 @@ app = Flask(__name__)
 
 SMS_GATE_BASE = os.environ.get("SMS_GATE_URL", "http://server:3000").rstrip("/")
 API_BASE = f"{SMS_GATE_BASE}/api/3rdparty/v1"
-SMS_GATE_USER = os.environ.get("SMS_GATE_USER", "")
-SMS_GATE_PASS = os.environ.get("SMS_GATE_PASS", "")
 
 _http = requests.Session()
 
 
-def get_token():
-    """Obtain JWT from sms-gate using device credentials from env."""
-    if not SMS_GATE_USER or not SMS_GATE_PASS:
-        return None, "SMS_GATE_USER and SMS_GATE_PASS must be set"
+def get_token(username: str, password: str):
+    """Obtain JWT from sms-gate using the given device credentials."""
+    if not username or not password:
+        return None, "username and password are required"
     resp = _http.post(
         f"{API_BASE}/auth/token",
-        auth=(SMS_GATE_USER, SMS_GATE_PASS),
+        auth=(username.strip(), password),
         json={"scopes": ["messages:send"], "ttl": 86400},
         timeout=15,
     )
@@ -36,11 +34,11 @@ def get_token():
     return token, None
 
 
-def send_sms(phone: str, message: str) -> tuple[int, dict]:
+def send_sms(username: str, password: str, phone: str, message: str) -> tuple[int, dict]:
     """
-    Get JWT and send SMS via sms-gate. Returns (status_code, json_body).
+    Get JWT with given credentials and send SMS via sms-gate. Returns (status_code, json_body).
     """
-    token, err = get_token()
+    token, err = get_token(username, password)
     if err:
         return 503, {"success": False, "error": err}
 
@@ -62,36 +60,47 @@ def send_sms(phone: str, message: str) -> tuple[int, dict]:
     return resp.status_code, body
 
 
+def validate_phone(phone: str) -> bool:
+    cleaned = re.sub(r"[\s\-\(\)]", "", phone)
+    return bool(re.match(r"^\+?[0-9]{10,15}$", cleaned))
+
+
 @app.route("/")
 def index():
-    """Serve the send-SMS form."""
+    """Serve the send-SMS form (username, password, phone, message)."""
     return render_template_string(INDEX_HTML)
 
 
 @app.route("/api/send", methods=["POST"])
 def api_send():
     """
-    Accept JSON { "phone": "+...", "message": "..." } or form data.
-    Returns JSON with success/error.
+    Accept JSON or form: username, password (device credentials), phone, message.
+    Credentials are not stored; they are used only for this request.
     """
     if request.is_json:
         data = request.get_json() or {}
+        username = (data.get("username") or "").strip()
+        password = data.get("password") or ""
         phone = (data.get("phone") or "").strip()
         message = (data.get("message") or "").strip()
     else:
+        username = (request.form.get("username") or "").strip()
+        password = request.form.get("password") or ""
         phone = (request.form.get("phone") or "").strip()
         message = (request.form.get("message") or "").strip()
 
+    if not username:
+        return jsonify({"success": False, "error": "username is required"}), 400
+    if not password:
+        return jsonify({"success": False, "error": "password is required"}), 400
     if not phone:
         return jsonify({"success": False, "error": "phone is required"}), 400
     if not message:
         return jsonify({"success": False, "error": "message is required"}), 400
-
-    # Basic E.164-ish: allow + and digits
-    if not re.match(r"^\+?[0-9]{10,15}$", re.sub(r"[\s\-\(\)]", "", phone)):
+    if not validate_phone(phone):
         return jsonify({"success": False, "error": "phone must be E.164 (e.g. +48123456789)"}), 400
 
-    status, body = send_sms(phone, message)
+    status, body = send_sms(username, password, phone, message)
     return jsonify(body), status
 
 
@@ -113,41 +122,72 @@ INDEX_HTML = """<!DOCTYPE html>
     .message { margin-top: 1rem; padding: 0.5rem; border-radius: 4px; }
     .message.success { background: #e8f5e9; color: #2e7d32; }
     .message.error { background: #ffebee; color: #c62828; }
+    .hint { font-size: 0.85rem; color: #666; margin-top: 0.25rem; }
   </style>
 </head>
 <body>
   <h1>Send SMS</h1>
+  <p class="hint">Device credentials (from Android app: Settings → Cloud Server). Not stored on the server.</p>
   <form id="form">
+    <label for="user">Device username</label>
+    <input type="text" id="user" name="username" placeholder="e.g. A1B2C3" autocomplete="username">
+    <label for="pass">Device password</label>
+    <input type="password" id="pass" name="password" placeholder="From app" autocomplete="current-password">
     <label for="phone">Phone number (E.164)</label>
     <input type="text" id="phone" name="phone" placeholder="+48123456789" required>
     <label for="msg">Message</label>
     <textarea id="msg" name="message" required></textarea>
+    <label><input type="checkbox" id="save"> Remember username/password in this browser</label>
     <button type="submit">Send</button>
   </form>
   <div id="out" class="message" style="display:none;"></div>
   <script>
-    document.getElementById('form').onsubmit = async function(e) {
-      e.preventDefault();
-      const out = document.getElementById('out');
-      out.style.display = 'none';
-      const phone = document.getElementById('phone').value.trim();
-      const message = document.getElementById('msg').value.trim();
+    (function() {
+      var KEY = 'smsgate_device';
+      var form = document.getElementById('form');
+      var user = document.getElementById('user');
+      var pass = document.getElementById('pass');
+      var save = document.getElementById('save');
       try {
-        const r = await fetch('/api/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone, message })
-        });
-        const data = await r.json();
-        out.style.display = 'block';
-        out.className = 'message ' + (data.success ? 'success' : 'error');
-        out.textContent = data.success ? 'Message enqueued.' : (data.error || JSON.stringify(data));
-      } catch (err) {
-        out.style.display = 'block';
-        out.className = 'message error';
-        out.textContent = err.message || 'Request failed';
-      }
-    };
+        var saved = localStorage.getItem(KEY);
+        if (saved) {
+          var o = JSON.parse(saved);
+          if (o.u) user.value = o.u;
+          if (o.p) pass.value = o.p;
+          save.checked = true;
+        }
+      } catch (e) {}
+      form.onsubmit = async function(e) {
+        e.preventDefault();
+        if (save.checked) {
+          try { localStorage.setItem(KEY, JSON.stringify({ u: user.value, p: pass.value })); } catch (e) {}
+        } else {
+          try { localStorage.removeItem(KEY); } catch (e) {}
+        }
+        var out = document.getElementById('out');
+        out.style.display = 'none';
+        try {
+          var r = await fetch('/api/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              username: user.value.trim(),
+              password: pass.value,
+              phone: document.getElementById('phone').value.trim(),
+              message: document.getElementById('msg').value.trim()
+            })
+          });
+          var data = await r.json();
+          out.style.display = 'block';
+          out.className = 'message ' + (data.success ? 'success' : 'error');
+          out.textContent = data.success ? 'Message enqueued.' : (data.error || JSON.stringify(data));
+        } catch (err) {
+          out.style.display = 'block';
+          out.className = 'message error';
+          out.textContent = err.message || 'Request failed';
+        }
+      };
+    })();
   </script>
 </body>
 </html>

@@ -53,8 +53,6 @@ services:
       - "4842:4842"
     environment:
       SMS_GATE_URL: http://server:3000
-      SMS_GATE_USER: ${SMS_GATE_USER}
-      SMS_GATE_PASS: ${SMS_GATE_PASS}
     depends_on:
       - server
 

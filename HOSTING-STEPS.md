@@ -33,9 +33,10 @@ Replace `<REPO_URL>` with your repo URL (e.g. `https://github.com/your-org/sms-g
 
 The script will:
 
+- If the SMS Gate stack is already running, ask whether to **redo install** (stop and remove containers and volumes, then reinstall with current code). Say `y` to refresh the stack after code changes.
 - Generate a JWT secret and a private token (and write them into config).
 - Ask for a database password (press Enter to use `root`).
-- Create `config.yml` and `.env` (no manual editing).
+- Create `config.yml` and `.env` (no manual editing). Device credentials are not stored; you send them with each request (Web UI or Zapier).
 - Start the stack with `docker compose up -d` and wait until the server is up.
 - Print the **private token** and next steps.
 
@@ -53,30 +54,18 @@ Save the private token shown at the end; you need it for the Android app. Do not
   - Production: `https://your-domain.com/api/mobile/v1` (reverse proxy to port 3000).
 - Set **Private token** to the token the install script printed in step 3.
 - Turn on **Cloud server** and restart the app if asked.
-- After a successful connection, the app will show **Username** and **Password**. You will use these in the next step.
+- After a successful connection, the app will show **Username** and **Password**. Use these in the Web UI or in API requests to send SMS; they are not stored on the server.
 
 ---
 
-## 5. Set Web UI credentials
+## 5. Verify
 
-On the server machine, in the repo directory, run:
-
-```bash
-./install-and-run-sms-gate-server.sh --set-credentials
-```
-
-When prompted, enter the **Username** and **Password** from the Android app (Settings → Cloud Server). The script will write them to `.env` and restart the Web UI container. After this, the Web UI and Zapier can send SMS.
-
----
-
-## 6. Verify
-
-- **Web UI**: Open `http://<MACHINE_IP>:4842` (or your public URL). Enter phone and message; submit. The SMS should be sent via the connected device.
+- **Web UI**: Open `http://<MACHINE_IP>:4842` (or your public URL). Enter the device **Username** and **Password** (from the app), plus **phone** and **message**; submit. The SMS should be sent. You can optionally check "Remember username/password in this browser" to store them only in your browser (localStorage).
 - **API health**: On the server, run `curl http://localhost:3000/health`; you should get JSON.
 
 ---
 
-## 7. Optional: expose for the Android app or Web UI
+## 6. Optional: expose for the Android app or Web UI
 
 - **Tailscale**: On the server, run `tailscale serve 3000`. Use the shown HTTPS URL + `/api/mobile/v1` as the app API URL. For Web UI over Tailscale you can run another serve or use a different port.
 - **Production**: Put a reverse proxy (e.g. Nginx/Caddy) in front with HTTPS. Proxy your domain to `http://localhost:3000` (API) and optionally to `http://localhost:4842` (Web UI).
@@ -89,7 +78,6 @@ When prompted, enter the **Username** and **Password** from the Android app (Set
 2. Clone repo; `cd sms-gate`.
 3. Run `./install-and-run-sms-gate-server.sh`; save the printed private token.
 4. Connect the Android app with the API URL and that private token; note the app’s Username and Password.
-5. Run `./install-and-run-sms-gate-server.sh --set-credentials` and enter those Username and Password.
-6. Verify Web UI and `/health`.
+5. Verify: open the Web UI, enter Username, Password, phone, and message; send. Device credentials are not stored on the server.
 
 No manual editing of `config.yml` or `.env` in the default path. The Web UI uses the internal URL `http://server:3000` automatically.
