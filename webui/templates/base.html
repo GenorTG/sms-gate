@@ -48,13 +48,18 @@
       <a href="{{ url_for('health_page') }}">Health</a>
     </div>
     <span>
-      {% if session.get('user') %}Logged in as <strong>{{ session.user }}</strong>{% endif %}
-      <a href="{{ url_for('logout') }}">Logout</a>
+      {% if session.get('user') %}
+        Logged in as <strong>{{ session.user }}</strong>
+        <a href="{{ url_for('logout') }}">Logout</a>
+      {% endif %}
     </span>
   </header>
   <main class="main">
     <div class="device-account">
       <strong>Device account</strong> (for API: devices, messages, logs, webhooks, settings)
+      {% if device_account_error %}
+        <p class="message error">{{ device_account_error }}</p>
+      {% endif %}
       <form method="post" action="{{ url_for('set_device_account') }}">
         <input type="hidden" name="next" value="{{ request.url }}">
         <div>

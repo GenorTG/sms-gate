@@ -12,6 +12,33 @@ API_BASE = f"{SMS_GATE_BASE}/api/3rdparty/v1"
 _http = requests.Session()
 
 
+def _api_error_reason(status_code: int, body: Any) -> str:
+    """Build a user-friendly error message from API status and body."""
+    detail = ""
+    if isinstance(body, dict):
+        detail = body.get("message") or body.get("error") or body.get("detail") or str(body)
+    elif isinstance(body, str) and body.strip():
+        detail = body.strip()
+    if not detail:
+        detail = f"HTTP {status_code}"
+    reason = ""
+    if status_code == 401:
+        reason = "Invalid device username or password, or the device is not registered with this server."
+    elif status_code == 403:
+        reason = "Access denied (forbidden)."
+    elif status_code == 404:
+        reason = "Resource not found."
+    elif status_code >= 500:
+        reason = "Server error; try again later."
+    elif status_code >= 400:
+        reason = "Request was rejected."
+    if reason and detail and detail != f"HTTP {status_code}":
+        return f"{reason} Details: {detail}"
+    if reason:
+        return f"{reason} ({status_code})"
+    return detail
+
+
 def get_token(device_user: str, device_pass: str) -> tuple[str | None, str | None]:
     """Obtain JWT from sms-gate. Returns (token, None) or (None, error_message)."""
     if not device_user or not device_pass:
@@ -23,7 +50,11 @@ def get_token(device_user: str, device_pass: str) -> tuple[str | None, str | Non
         timeout=15,
     )
     if resp.status_code != 201:
-        return None, resp.text or f"HTTP {resp.status_code}"
+        try:
+            body = resp.json() if resp.content else {}
+        except Exception:
+            body = resp.text or ""
+        return None, _api_error_reason(resp.status_code, body)
     try:
         data = resp.json()
     except Exception:
@@ -74,9 +105,7 @@ def get_devices(device_user: str, device_pass: str) -> tuple[int, list[dict] | s
     code, data = _request("GET", "/devices", device_user, device_pass)
     if code == 200 and isinstance(data, list):
         return code, data
-    if isinstance(data, dict) and "message" in data:
-        return code, data.get("message", str(data))
-    return code, str(data) if not isinstance(data, str) else data
+    return code, _api_error_reason(code, data)
 
 
 def delete_device(
@@ -86,9 +115,7 @@ def delete_device(
     code, data = _request("DELETE", f"/devices/{device_id}", device_user, device_pass)
     if code in (204, 200):
         return code, None
-    if isinstance(data, dict) and "message" in data:
-        return code, data["message"]
-    return code, str(data) if data else f"HTTP {code}"
+    return code, _api_error_reason(code, data)
 
 
 # --- Messages ---
@@ -115,9 +142,7 @@ def get_messages(
     )
     if code == 200:
         return code, data
-    if isinstance(data, dict) and "message" in data:
-        return code, data["message"]
-    return code, str(data) if not isinstance(data, str) else data
+    return code, _api_error_reason(code, data)
 
 
 def get_message(
@@ -127,9 +152,7 @@ def get_message(
     code, data = _request("GET", f"/messages/{message_id}", device_user, device_pass)
     if code == 200 and isinstance(data, dict):
         return code, data
-    if isinstance(data, dict) and "message" in data:
-        return code, data["message"]
-    return code, str(data) if not isinstance(data, str) else data
+    return code, _api_error_reason(code, data)
 
 
 def post_message(
@@ -149,9 +172,7 @@ def post_message(
     code, data = _request("POST", "/messages", device_user, device_pass, json=payload)
     if code in (200, 202) and isinstance(data, dict):
         return code, data
-    if isinstance(data, dict) and "message" in data:
-        return code, data["message"]
-    return code, str(data) if not isinstance(data, str) else data
+    return code, _api_error_reason(code, data)
 
 
 # --- Logs ---
@@ -175,9 +196,7 @@ def get_logs(
     )
     if code == 200 and isinstance(data, list):
         return code, data
-    if isinstance(data, dict) and "message" in data:
-        return code, data["message"]
-    return code, str(data) if not isinstance(data, str) else data
+    return code, _api_error_reason(code, data)
 
 
 # --- Webhooks ---
@@ -188,9 +207,7 @@ def get_webhooks(device_user: str, device_pass: str) -> tuple[int, list[dict] | 
     code, data = _request("GET", "/webhooks", device_user, device_pass)
     if code == 200 and isinstance(data, list):
         return code, data
-    if isinstance(data, dict) and "message" in data:
-        return code, data["message"]
-    return code, str(data) if not isinstance(data, str) else data
+    return code, _api_error_reason(code, data)
 
 
 def post_webhook(
@@ -200,9 +217,7 @@ def post_webhook(
     code, data = _request("POST", "/webhooks", device_user, device_pass, json=payload)
     if code in (200, 201) and isinstance(data, dict):
         return code, data
-    if isinstance(data, dict) and "message" in data:
-        return code, data["message"]
-    return code, str(data) if not isinstance(data, str) else data
+    return code, _api_error_reason(code, data)
 
 
 def delete_webhook(
@@ -214,9 +229,7 @@ def delete_webhook(
     )
     if code in (204, 200):
         return code, None
-    if isinstance(data, dict) and "message" in data:
-        return code, data["message"]
-    return code, str(data) if data else f"HTTP {code}"
+    return code, _api_error_reason(code, data)
 
 
 # --- Settings ---
@@ -227,9 +240,7 @@ def get_settings(device_user: str, device_pass: str) -> tuple[int, dict | str]:
     code, data = _request("GET", "/settings", device_user, device_pass)
     if code == 200 and isinstance(data, dict):
         return code, data
-    if isinstance(data, dict) and "message" in data:
-        return code, data["message"]
-    return code, str(data) if not isinstance(data, str) else data
+    return code, _api_error_reason(code, data)
 
 
 def patch_settings(
@@ -239,9 +250,7 @@ def patch_settings(
     code, data = _request("PATCH", "/settings", device_user, device_pass, json=payload)
     if code == 200 and isinstance(data, dict):
         return code, data
-    if isinstance(data, dict) and "message" in data:
-        return code, data["message"]
-    return code, str(data) if not isinstance(data, str) else data
+    return code, _api_error_reason(code, data)
 
 
 # --- Health (root, no auth typically) ---

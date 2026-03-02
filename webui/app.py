@@ -45,6 +45,13 @@ app = Flask(__name__)
 app.secret_key = get_secret_key()
 
 
+@app.context_processor
+def inject_device_account_error():
+    """Expose device-account validation error to base template."""
+    err = session.pop("_device_account_error", None)
+    return {"device_account_error": err}
+
+
 def get_device_creds() -> tuple[str | None, str | None]:
     """Return (device_user, device_pass) from session or (None, None)."""
     return session.get("device_user"), session.get("device_pass")
@@ -85,10 +92,15 @@ def logout():
 @app.route("/device-account", methods=["POST"])
 @login_required
 def set_device_account():
-    """Store device credentials in session for API calls."""
+    """Store device credentials in session; validate against API."""
     session["device_user"] = (request.form.get("device_user") or "").strip()
     session["device_pass"] = request.form.get("device_pass") or ""
     next_url = request.form.get("next") or request.referrer or url_for("dashboard")
+    # Validate so user sees a clear error instead of "unauthorized" on next page
+    if session["device_user"] and session["device_pass"]:
+        _, err = get_token(session["device_user"], session["device_pass"])
+        if err:
+            session["_device_account_error"] = f"Device credentials rejected: {err}"
     return redirect(next_url)
 
 

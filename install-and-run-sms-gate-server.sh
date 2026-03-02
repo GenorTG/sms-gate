@@ -45,6 +45,30 @@ if [[ "$STACK_UP" = true ]]; then
       echo "=== Update (keep data & config) ==="
       echo "Rebuilding images and restarting containers. config.yml, .env, and database are unchanged."
       echo ""
+      # Offer to set Web UI admin credentials if not already in .env (so login is required)
+      has_webui_user=0
+      has_webui_pass=0
+      if [[ -f .env ]]; then
+        grep -q '^WEBUI_ADMIN_USER=.' .env 2>/dev/null && has_webui_user=1
+        grep -q '^WEBUI_ADMIN_PASSWORD=.' .env 2>/dev/null && has_webui_pass=1
+      fi
+      if [[ $has_webui_user -eq 0 ]] || [[ $has_webui_pass -eq 0 ]]; then
+        echo "Web UI admin login is not configured. Set credentials to require login to the Web UI."
+        read -rp "Web UI admin username [admin]: " WEBUI_USER
+        WEBUI_USER="${WEBUI_USER:-admin}"
+        read -rsp "Web UI admin password (leave empty to skip): " WEBUI_PASS
+        echo ""
+        if [[ -n "$WEBUI_USER" && -n "$WEBUI_PASS" ]]; then
+          WEBUI_SECRET=$(openssl rand -hex 24)
+          echo "" >> .env
+          echo "# Web UI admin (added by installer)" >> .env
+          printf 'WEBUI_ADMIN_USER=%s\n' "$WEBUI_USER" >> .env
+          printf 'WEBUI_ADMIN_PASSWORD=%s\n' "$WEBUI_PASS" >> .env
+          printf 'WEBUI_SECRET_KEY=%s\n' "$WEBUI_SECRET" >> .env
+          echo "Web UI login enabled (user: $WEBUI_USER). Save your password."
+        fi
+        echo ""
+      fi
       docker compose build --no-cache
       docker compose up -d --force-recreate webui
       echo "Waiting for services (up to 60s)..."
