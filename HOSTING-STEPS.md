@@ -74,21 +74,29 @@ Save the private token shown at the end; you need it for the Android app. Do not
 
 ## Troubleshooting: 404 on /api/mobile/v1 (production URL)
 
-If your public URL (e.g. `https://sms-gate.rentiers.pl`) works for the root or `/health`, but `/api/mobile/v1`, `/api/v1`, or `/mobile/v1` return **404**, the reverse proxy is likely not forwarding the full path to the SMS Gateway container.
+If your public URL (e.g. `https://sms-gate.rentiers.pl`) returns **200** for `GET /` (version JSON) and **200** for `GET /health/ready`, but **404** for `/api/mobile/v1` or `/api/3rdparty/v1`, the SMS Gateway server is **not mounting the API routes**. The proxy is forwarding correctly (the 404 body is from the server). Fix the server config so the API is under `/api`.
 
-**1. Check the backend on the server**
+**1. Ensure the server mounts the API at `/api`**
+
+The API path is controlled by `http.api.path` in `config.yml` or the `HTTP__API__PATH` environment variable. This repo’s `docker-compose.yml` sets `HTTP__API__PATH: /api`. If you deployed without it:
+
+- **Using this repo:** Restart the stack so the server container gets `HTTP__API__PATH=/api` (already in `docker-compose.yml`), then try again.
+- **Custom deploy:** Set env `HTTP__API__PATH=/api` for the server process, or ensure `config.yml` has `http.api.path: /api`.
+
+**2. Check the backend on the server**
 
 From the machine where Docker runs:
 
 ```bash
-curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/health
-curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/api/mobile/v1
+curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/
+curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/health/ready
+curl -s -o /dev/null -w "%{http_code}" -X POST http://127.0.0.1:3000/api/mobile/v1/device -H "Content-Type: application/json" -d '{}'
 ```
 
-- `/health` should return `200`.
-- `/api/mobile/v1` usually returns `401` (Unauthorized) or `404` from the app itself — but **not** from your proxy. If you get `404` only when using the public URL and **not** when curling `127.0.0.1`, the proxy is the problem.
+- `GET /` and `GET /health/ready` should return `200`.
+- `POST /api/mobile/v1/device` should return `401` or `400` (not `404`) if the API is mounted. If you get `404` here, the API is not mounted — fix step 1 and restart the server.
 
-**2. Fix the reverse proxy**
+**3. Fix the reverse proxy (if API is mounted but public URL still 404)**
 
 The app must receive the full path (e.g. `/api/mobile/v1`). Do **not** strip the path.
 
@@ -115,7 +123,7 @@ The app must receive the full path (e.g. `/api/mobile/v1`). Do **not** strip the
   }
   ```
 
-**3. Android app API URL**
+**4. Android app API URL**
 
 Use exactly:
 
@@ -124,7 +132,7 @@ Use exactly:
 No trailing slash. Path order matters: **`/api/mobile/v1`** (api → mobile → v1).  
 Wrong (404): `/mobile/api/v1`, `/api/v1`, `/mobile/v1`.
 
-**4. Nginx Proxy Manager (NPM)**
+**5. Nginx Proxy Manager (NPM)**
 
 If you use Nginx Proxy Manager:
 
