@@ -84,7 +84,7 @@ docker compose up -d
 
 echo "Waiting for services (up to 60s)..."
 for i in {1..60}; do
-  if curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/health 2>/dev/null | grep -q 200; then
+  if curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:4841/health/ready 2>/dev/null | grep -q 200; then
     echo ""
     break
   fi
@@ -102,7 +102,7 @@ echo ""
 echo "=== Setup complete ==="
 echo ""
 echo "Server is running."
-echo "  API:    http://localhost:3000"
+echo "  API:    http://localhost:4841"
 echo "  Web UI: http://localhost:4842"
 echo ""
 echo "Private token (save for Android app): $PRIVATE_TOKEN"

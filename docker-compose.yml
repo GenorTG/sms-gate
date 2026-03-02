@@ -17,7 +17,7 @@ services:
     image: ghcr.io/android-sms-gateway/server:latest
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "4841:3000"
     volumes:
       - ./config.yml:/app/config.yml:ro
     environment:
@@ -28,6 +28,8 @@ services:
       DATABASE__DATABASE: sms
       # Force API routes under /api (mobile, 3rdparty). Omit or override if you use a different path.
       HTTP__API__PATH: /api
+      # Listen on all interfaces so the container can be reached from host and proxy (default in config is 0.0.0.0:3000).
+      HTTP__LISTEN: 0.0.0.0:3000
     depends_on:
       db:
         condition: service_healthy

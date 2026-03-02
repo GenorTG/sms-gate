@@ -20,7 +20,7 @@ The script generates secrets, creates `config.yml` and `.env`, starts the stack,
 
 1. Copy `config.example.yml` to `config.yml`; set database password, `gateway.private_token`, and `jwt.secret` (e.g. `openssl rand -base64 32`).
 2. Create `.env` with `DB_PASSWORD` (for compose). Device credentials are not stored; enter them in the Web UI or in each API request.
-3. Run `docker compose up -d`. API: http://localhost:3000, Web UI: http://localhost:4842.
+3. Run `docker compose up -d`. API: http://localhost:4841, Web UI: http://localhost:4842.
 
 ## Project layout
 
