@@ -61,7 +61,7 @@ Save the private token shown at the end; you need it for the Android app. Do not
 ## 5. Verify
 
 - **Web UI**: Open `http://<MACHINE_IP>:4842` (or your public URL). Enter the device **Username** and **Password** (from the app), plus **phone** and **message**; submit. The SMS should be sent. You can optionally check "Remember username/password in this browser" to store them only in your browser (localStorage).
-- **API health**: On the server, run `curl http://localhost:3000/health`; you should get JSON.
+- **API health**: On the server, run `curl http://localhost:3000/health/ready`; you should get JSON. The server also responds at `GET /` with version info.
 
 ---
 
@@ -69,6 +69,84 @@ Save the private token shown at the end; you need it for the Android app. Do not
 
 - **Tailscale**: On the server, run `tailscale serve 3000`. Use the shown HTTPS URL + `/api/mobile/v1` as the app API URL. For Web UI over Tailscale you can run another serve or use a different port.
 - **Production**: Put a reverse proxy (e.g. Nginx/Caddy) in front with HTTPS. Proxy your domain to `http://localhost:3000` (API) and optionally to `http://localhost:4842` (Web UI).
+
+---
+
+## Troubleshooting: 404 on /api/mobile/v1 (production URL)
+
+If your public URL (e.g. `https://sms-gate.rentiers.pl`) works for the root or `/health`, but `/api/mobile/v1`, `/api/v1`, or `/mobile/v1` return **404**, the reverse proxy is likely not forwarding the full path to the SMS Gateway container.
+
+**1. Check the backend on the server**
+
+From the machine where Docker runs:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/health
+curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3000/api/mobile/v1
+```
+
+- `/health` should return `200`.
+- `/api/mobile/v1` usually returns `401` (Unauthorized) or `404` from the app itself — but **not** from your proxy. If you get `404` only when using the public URL and **not** when curling `127.0.0.1`, the proxy is the problem.
+
+**2. Fix the reverse proxy**
+
+The app must receive the full path (e.g. `/api/mobile/v1`). Do **not** strip the path.
+
+- **Nginx** — pass the full URI (no trailing slash on `proxy_pass`):
+
+  ```nginx
+  location / {
+      proxy_pass http://127.0.0.1:3000;   # no trailing slash
+      proxy_http_version 1.1;
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto $scheme;
+  }
+  ```
+
+  If you use `proxy_pass http://127.0.0.1:3000/;` (with trailing slash), Nginx replaces the path and the backend gets the wrong path → 404.
+
+- **Caddy** — simple reverse proxy:
+
+  ```caddy
+  sms-gate.rentiers.pl {
+      reverse_proxy 127.0.0.1:3000
+  }
+  ```
+
+**3. Android app API URL**
+
+Use exactly:
+
+- `https://sms-gate.rentiers.pl/api/mobile/v1`
+
+No trailing slash. Path order matters: **`/api/mobile/v1`** (api → mobile → v1).  
+Wrong (404): `/mobile/api/v1`, `/api/v1`, `/mobile/v1`.
+
+**4. Nginx Proxy Manager (NPM)**
+
+If you use Nginx Proxy Manager:
+
+- Use a single **Proxy Host** for `sms-gate.rentiers.pl` → `127.0.0.1:3000` (or `host.docker.internal:3000` if NPM runs in Docker and the app is on the host). Do **not** use a “Redirect” — that sends the browser elsewhere.
+- **Do not add “Custom locations”** for `/api` or `/api/mobile` unless you know you need them. A single proxy for `/` is enough; the backend expects the full path `/api/mobile/v1`.
+- In **Advanced** → “Custom Nginx configuration”, **do not** add a `proxy_pass` with a trailing slash (e.g. `proxy_pass http://127.0.0.1:3000/;`). That would strip the path and cause 404 for `/api/mobile/v1`. Leave Advanced empty, or only add extra headers (e.g. `proxy_set_header ...`).
+- WebSocket support (checkbox) is fine and does not change the path.
+
+If 404 persists, open the proxy host in NPM, go to **Advanced**, and paste this so the full path is preserved (adjust upstream if needed):
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+If NPM runs in Docker and the SMS Gateway runs on the host, use `host.docker.internal:3000` instead of `127.0.0.1:3000` (or the host’s LAN IP). Then save and test `https://sms-gate.rentiers.pl/api/mobile/v1` again.
 
 ---
 

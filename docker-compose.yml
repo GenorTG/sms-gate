@@ -26,6 +26,8 @@ services:
       DATABASE__USER: root
       DATABASE__PASSWORD: ${DB_PASSWORD:-root}
       DATABASE__DATABASE: sms
+      # Force API routes under /api (mobile, 3rdparty). Omit or override if you use a different path.
+      HTTP__API__PATH: /api
     depends_on:
       db:
         condition: service_healthy
