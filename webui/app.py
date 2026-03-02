@@ -112,59 +112,83 @@ INDEX_HTML = """<!DOCTYPE html>
   <title>Send SMS</title>
   <style>
     * { box-sizing: border-box; }
-    body { font-family: system-ui, sans-serif; max-width: 420px; margin: 2rem auto; padding: 0 1rem; }
-    h1 { font-size: 1.25rem; margin-bottom: 1rem; }
+    body { font-family: system-ui, sans-serif; max-width: 440px; margin: 2rem auto; padding: 0 1rem; }
+    h1 { font-size: 1.25rem; margin-bottom: 0.5rem; }
+    .section { margin-top: 1.25rem; }
+    .section:first-of-type { margin-top: 0; }
+    .section-title { font-size: 0.9rem; font-weight: 600; color: #444; margin-bottom: 0.5rem; }
     label { display: block; margin-top: 0.75rem; font-weight: 500; }
-    input, textarea { width: 100%; padding: 0.5rem; margin-top: 0.25rem; border: 1px solid #ccc; border-radius: 4px; }
+    input, textarea { width: 100%; padding: 0.5rem; margin-top: 0.25rem; border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; }
     textarea { min-height: 100px; resize: vertical; }
-    button { margin-top: 1rem; padding: 0.6rem 1.2rem; background: #333; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+    .save-row { margin-top: 0.75rem; display: flex; align-items: center; gap: 0.5rem; }
+    .save-row input[type="checkbox"] { width: auto; margin: 0; }
+    .save-row label { margin: 0; font-weight: normal; font-size: 0.9rem; }
+    .hint { font-size: 0.8rem; color: #666; margin-top: 0.2rem; }
+    button { margin-top: 1.25rem; padding: 0.6rem 1.2rem; background: #333; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-size: 1rem; }
     button:hover { background: #555; }
     .message { margin-top: 1rem; padding: 0.5rem; border-radius: 4px; }
     .message.success { background: #e8f5e9; color: #2e7d32; }
     .message.error { background: #ffebee; color: #c62828; }
-    .hint { font-size: 0.85rem; color: #666; margin-top: 0.25rem; }
   </style>
 </head>
 <body>
   <h1>Send SMS</h1>
-  <p class="hint">Device credentials (from Android app: Settings → Cloud Server). Not stored on the server.</p>
+  <p class="hint">Use device credentials from the Android app (Settings → Cloud Server). Not stored on the server.</p>
+
   <form id="form">
-    <label for="user">Device username</label>
-    <input type="text" id="user" name="username" placeholder="e.g. A1B2C3" autocomplete="username">
-    <label for="pass">Device password</label>
-    <input type="password" id="pass" name="password" placeholder="From app" autocomplete="current-password">
-    <label for="phone">Phone number (E.164)</label>
-    <input type="text" id="phone" name="phone" placeholder="+48123456789" required>
-    <label for="msg">Message</label>
-    <textarea id="msg" name="message" required></textarea>
-    <label><input type="checkbox" id="save"> Remember username/password in this browser</label>
-    <button type="submit">Send</button>
+    <div class="section">
+      <div class="section-title">1. Device credentials</div>
+      <label for="user">Device username</label>
+      <input type="text" id="user" name="username" placeholder="e.g. A1B2C3" autocomplete="username" required>
+      <label for="pass">Device password</label>
+      <input type="password" id="pass" name="password" placeholder="From Android app" autocomplete="current-password" required>
+      <div class="save-row">
+        <input type="checkbox" id="save" name="save">
+        <label for="save">Save in this browser for next time (stored only on this device, not on the server)</label>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">2. Recipient and message</div>
+      <label for="phone">Phone number (E.164)</label>
+      <input type="text" id="phone" name="phone" placeholder="+48123456789" required>
+      <label for="msg">Message</label>
+      <textarea id="msg" name="message" placeholder="Your message..." required></textarea>
+    </div>
+
+    <button type="submit">Send SMS</button>
   </form>
   <div id="out" class="message" style="display:none;"></div>
+
   <script>
     (function() {
       var KEY = 'smsgate_device';
       var form = document.getElementById('form');
       var user = document.getElementById('user');
       var pass = document.getElementById('pass');
-      var save = document.getElementById('save');
+      var saveEl = document.getElementById('save');
+      var phone = document.getElementById('phone');
+      var msg = document.getElementById('msg');
+      var out = document.getElementById('out');
+      if (!form || !user || !pass || !saveEl || !phone || !msg || !out) return;
+
       try {
         var saved = localStorage.getItem(KEY);
         if (saved) {
           var o = JSON.parse(saved);
           if (o.u) user.value = o.u;
           if (o.p) pass.value = o.p;
-          save.checked = true;
+          saveEl.checked = true;
         }
       } catch (e) {}
+
       form.onsubmit = async function(e) {
         e.preventDefault();
-        if (save.checked) {
-          try { localStorage.setItem(KEY, JSON.stringify({ u: user.value, p: pass.value })); } catch (e) {}
+        if (saveEl.checked) {
+          try { localStorage.setItem(KEY, JSON.stringify({ u: user.value, p: pass.value })); } catch (err) {}
         } else {
-          try { localStorage.removeItem(KEY); } catch (e) {}
+          try { localStorage.removeItem(KEY); } catch (err) {}
         }
-        var out = document.getElementById('out');
         out.style.display = 'none';
         try {
           var r = await fetch('/api/send', {
@@ -173,8 +197,8 @@ INDEX_HTML = """<!DOCTYPE html>
             body: JSON.stringify({
               username: user.value.trim(),
               password: pass.value,
-              phone: document.getElementById('phone').value.trim(),
-              message: document.getElementById('msg').value.trim()
+              phone: phone.value.trim(),
+              message: msg.value.trim()
             })
           });
           var data = await r.json();

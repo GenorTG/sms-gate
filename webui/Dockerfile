@@ -9,4 +9,5 @@ COPY app.py .
 ENV PORT=4842
 EXPOSE 4842
 
-CMD ["python", "-u", "app.py"]
+# Production: gunicorn (no Flask dev-server warning)
+CMD ["gunicorn", "--bind", "0.0.0.0:4842", "--workers", "1", "--threads", "2", "app:app"]

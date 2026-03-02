@@ -34,7 +34,7 @@ The script generates secrets, creates `config.yml` and `.env`, starts the stack,
 
 ## Web UI (port 4842)
 
-- **GET /** – Form: device username, device password (from Android app), phone (E.164), message. Optional "Remember in this browser" stores credentials only in the browser (localStorage). Credentials are not stored on the server.
+- **GET /** – Form: (1) Device username and password (from Android app), with optional "Save in this browser for next time" (localStorage only); (2) Phone (E.164) and message. Credentials are not stored on the server. Served with gunicorn in production (no dev-server warning).
 - **POST /api/send** – JSON body: `{"username": "...", "password": "...", "phone": "+...", "message": "..."}`. All four required; credentials are used only for that request. Returns JSON success/error.
 
 ## Production

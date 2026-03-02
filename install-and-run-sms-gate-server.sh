@@ -76,7 +76,9 @@ EOF
 echo "Created .env (DB password only; device credentials are entered in the Web UI or in each API request)."
 echo ""
 
-# 6. Start stack
+# 6. Build (no cache) and start stack
+echo "Building images (no cache, fresh install)..."
+docker compose build --no-cache
 echo "Starting Docker stack..."
 docker compose up -d
 
