@@ -1,0 +1,62 @@
+services:
+  db:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-root}
+      MYSQL_DATABASE: sms
+    volumes:
+      - sms-mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  server:
+    image: ghcr.io/android-sms-gateway/server:latest
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./config.yml:/app/config.yml:ro
+    environment:
+      DATABASE__HOST: db
+      DATABASE__PORT: "3306"
+      DATABASE__USER: root
+      DATABASE__PASSWORD: ${DB_PASSWORD:-root}
+      DATABASE__DATABASE: sms
+    depends_on:
+      db:
+        condition: service_healthy
+
+  worker:
+    image: ghcr.io/android-sms-gateway/server:latest
+    restart: unless-stopped
+    command: ["/app/app", "worker"]
+    volumes:
+      - ./config.yml:/app/config.yml:ro
+    environment:
+      DATABASE__HOST: db
+      DATABASE__PORT: "3306"
+      DATABASE__USER: root
+      DATABASE__PASSWORD: ${DB_PASSWORD:-root}
+      DATABASE__DATABASE: sms
+    depends_on:
+      db:
+        condition: service_healthy
+
+  webui:
+    build: ./webui
+    restart: unless-stopped
+    ports:
+      - "4842:4842"
+    environment:
+      SMS_GATE_URL: http://server:3000
+      SMS_GATE_USER: ${SMS_GATE_USER}
+      SMS_GATE_PASS: ${SMS_GATE_PASS}
+    depends_on:
+      - server
+
+volumes:
+  sms-mariadb-data:
