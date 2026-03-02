@@ -46,7 +46,7 @@ if [[ "$STACK_UP" = true ]]; then
       echo "Rebuilding images and restarting containers. config.yml, .env, and database are unchanged."
       echo ""
       docker compose build --no-cache
-      docker compose up -d
+      docker compose up -d --force-recreate webui
       echo "Waiting for services (up to 60s)..."
       for i in {1..60}; do
         if curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:4841/health/ready 2>/dev/null | grep -q 200; then
@@ -59,6 +59,9 @@ if [[ "$STACK_UP" = true ]]; then
       echo ""
       echo "Recent logs:"
       docker compose logs --tail=15
+      echo ""
+      echo "Web UI container (last 40 lines; check for errors if Web UI fails to start):"
+      docker compose logs --tail=40 webui 2>/dev/null || true
       echo ""
       echo "=== Update complete ==="
       echo "  API:    http://localhost:4841"
@@ -97,6 +100,9 @@ elif [[ -f config.yml ]]; then
         sleep 1
         printf "."
       done
+      echo ""
+      echo "Web UI container logs (last 30 lines):"
+      docker compose logs --tail=30 webui 2>/dev/null || true
       echo ""
       echo "Stack started. API: http://localhost:4841  Web UI: http://localhost:4842"
       exit 0
@@ -174,6 +180,9 @@ echo ""
 
 echo "Recent logs:"
 docker compose logs --tail=20
+echo ""
+echo "Web UI container (last 40 lines; check for errors if Web UI fails to start):"
+docker compose logs --tail=40 webui 2>/dev/null || true
 echo ""
 
 # 7. Success message

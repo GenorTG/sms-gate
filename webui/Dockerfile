@@ -4,7 +4,8 @@ WORKDIR /app
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY app.py .
+COPY app.py auth.py sms_gate_client.py .
+COPY templates/ templates/
 
 ENV PORT=4842
 EXPOSE 4842
