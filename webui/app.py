@@ -15,6 +15,7 @@ from flask import (
     session,
     render_template,
 )
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from auth import (
     is_auth_enabled,
@@ -43,6 +44,9 @@ from sms_gate_client import (
 
 app = Flask(__name__)
 app.secret_key = get_secret_key()
+
+# Behind HTTPS reverse proxy: use X-Forwarded-Proto/Host so redirects use https and correct host
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
 
 @app.context_processor
