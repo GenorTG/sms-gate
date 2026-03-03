@@ -39,6 +39,22 @@ def _api_error_reason(status_code: int, body: Any) -> str:
     return detail
 
 
+# Scopes required for Web UI: devices, messages, logs, webhooks, settings (per docs.sms-gate.app)
+_TOKEN_SCOPES = [
+    "messages:send",
+    "messages:read",
+    "messages:list",
+    "devices:list",
+    "devices:delete",
+    "logs:read",
+    "webhooks:list",
+    "webhooks:write",
+    "webhooks:delete",
+    "settings:read",
+    "settings:write",
+]
+
+
 def get_token(device_user: str, device_pass: str) -> tuple[str | None, str | None]:
     """Obtain JWT from sms-gate. Returns (token, None) or (None, error_message)."""
     if not device_user or not device_pass:
@@ -46,7 +62,7 @@ def get_token(device_user: str, device_pass: str) -> tuple[str | None, str | Non
     resp = _http.post(
         f"{API_BASE}/auth/token",
         auth=(device_user.strip(), device_pass),
-        json={"scopes": ["messages:send"], "ttl": 86400},
+        json={"scopes": _TOKEN_SCOPES, "ttl": 86400},
         timeout=15,
     )
     if resp.status_code != 201:
