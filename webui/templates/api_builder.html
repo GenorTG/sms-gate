@@ -3,11 +3,12 @@
 {% block content %}
 <div class="card">
   <h1>API Request Builder</h1>
-  <p class="hint">Choose an operation, fill the fields, and copy the generated curl or fetch. No need to look up the docs.</p>
+  <p class="hint">Choose an operation, fill the fields, and copy the generated curl or fetch. The generated code calls your <strong>SMS Gate API server directly</strong> (not this Web UI). Use your API base URL below so Zapier, scripts, and third-party apps talk to the API only.</p>
 
   <div id="builder_form" class="builder-form" style="margin-top:1rem;">
-    <label for="base_url">Base URL (your server, no trailing slash)</label>
-    <input type="url" id="base_url" placeholder="https://sms-gate.example.com" value="" style="max-width:480px;">
+    <label for="base_url">SMS Gate API base URL (no trailing slash) — e.g. <code>https://sms-gate.domain.pl</code></label>
+    <input type="url" id="base_url" placeholder="https://sms-gate.domain.pl" value="" style="max-width:480px;">
+    <p class="hint">Use the address of your SMS Gate API server. Do not use the Web UI address (e.g. sms-gate-web.domain.pl) here.</p>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1rem;">
       <div>
@@ -166,7 +167,7 @@
 
   function generate() {
     var op = getSelectedOp();
-    var base = baseUrl.value.trim().replace(/\/$/, '') || 'https://your-server.com';
+    var base = baseUrl.value.trim().replace(/\/$/, '') || 'https://sms-gate.example.com';
     var path = getPath();
     var query = getQueryString();
     var fullUrl = base + path + query;
