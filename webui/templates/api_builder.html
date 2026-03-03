@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+{% block title %}API Request Builder - SMS Gate{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>API Request Builder</h1>
+  <p class="hint">Choose an operation, fill the fields, and copy the generated curl or fetch. No need to look up the docs.</p>
+
+  <div id="builder_form" class="builder-form" style="margin-top:1rem;">
+    <label for="base_url">Base URL (your server, no trailing slash)</label>
+    <input type="url" id="base_url" placeholder="https://sms-gate.example.com" value="" style="max-width:480px;">
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1rem;">
+      <div>
+        <label for="device_user">Device username</label>
+        <input type="text" id="device_user" placeholder="From Android app" value="{{ default_device_user }}">
+      </div>
+      <div>
+        <label for="device_pass">Device password</label>
+        <input type="password" id="device_pass" placeholder="From Android app">
+      </div>
+    </div>
+
+    <label for="op_select" style="margin-top:1rem;">Request type</label>
+    <select id="op_select" style="max-width:400px;">
+      {% for op in operations %}
+      <option value="{{ op.id }}" data-method="{{ op.method }}" data-path="{{ op.path }}" data-auth="{{ op.auth }}"
+        {% if op.pathParams %}data-path-params="{{ op.pathParams | tojson | e }}"{% endif %}
+        {% if op.queryParams %}data-query-params="{{ op.queryParams | tojson | e }}"{% endif %}
+        {% if op.body %}data-body="{{ op.body | tojson | e }}"{% endif %}
+        {% if op.bodyTemplate %}data-body-template="{{ op.bodyTemplate | tojson | e }}"{% endif %}
+      >{{ op.method }} {{ op.path }} — {{ op.label }}</option>
+      {% endfor %}
+    </select>
+
+    <div id="path_params" class="param-group" style="margin-top:1rem;"></div>
+    <div id="query_params" class="param-group" style="margin-top:0.5rem;"></div>
+    <div id="body_params" class="param-group" style="margin-top:0.5rem;"></div>
+
+    <div style="margin-top:1rem;">
+      <button type="button" class="primary" id="btn_generate">Generate</button>
+    </div>
+  </div>
+
+  <div style="margin-top:1.5rem;">
+    <label>Generated request (curl)</label>
+    <textarea id="output_curl" readonly rows="12" style="font-family:ui-monospace,monospace;font-size:0.9rem;width:100%;max-width:100%;"></textarea>
+    <button type="button" class="primary" id="btn_copy_curl" style="margin-top:0.5rem;">Copy curl</button>
+  </div>
+
+  <div style="margin-top:1rem;">
+    <label>Optional: JavaScript fetch</label>
+    <textarea id="output_fetch" readonly rows="14" style="font-family:ui-monospace,monospace;font-size:0.9rem;width:100%;max-width:100%;"></textarea>
+    <button type="button" class="primary" id="btn_copy_fetch" style="margin-top:0.5rem;">Copy fetch</button>
+  </div>
+</div>
+
+<script>
+(function() {
+  var operations = {{ operations | tojson }};
+  var opSelect = document.getElementById('op_select');
+  var baseUrl = document.getElementById('base_url');
+  var deviceUser = document.getElementById('device_user');
+  var devicePass = document.getElementById('device_pass');
+  var pathParamsDiv = document.getElementById('path_params');
+  var queryParamsDiv = document.getElementById('query_params');
+  var bodyParamsDiv = document.getElementById('body_params');
+  var outputCurl = document.getElementById('output_curl');
+  var outputFetch = document.getElementById('output_fetch');
+
+  function getSelectedOp() {
+    var id = opSelect.value;
+    for (var i = 0; i < operations.length; i++) {
+      if (operations[i].id === id) return operations[i];
+    }
+    return null;
+  }
+
+  function escapeShell(s) {
+    if (s === null || s === undefined) return "''";
+    return "'" + String(s).replace(/'/g, "'\"'\"'") + "'";
+  }
+
+  function renderDynamicFields() {
+    var op = getSelectedOp();
+    if (!op) return;
+    pathParamsDiv.innerHTML = '';
+    queryParamsDiv.innerHTML = '';
+    bodyParamsDiv.innerHTML = '';
+    if (op.pathParams && op.pathParams.length) {
+      pathParamsDiv.innerHTML = '<strong>Path parameters</strong>';
+      op.pathParams.forEach(function(p) {
+        pathParamsDiv.innerHTML += '<div style="margin-top:0.25rem;"><label>' + (p.placeholder || p.name) + '</label><input type="text" data-path-param="' + p.name + '" placeholder="' + (p.placeholder || '') + '"></div>';
+      });
+    }
+    if (op.queryParams && op.queryParams.length) {
+      queryParamsDiv.innerHTML = '<strong>Query parameters (optional)</strong>';
+      op.queryParams.forEach(function(p) {
+        queryParamsDiv.innerHTML += '<div style="margin-top:0.25rem;"><label>' + p.name + '</label><input type="text" data-query-param="' + p.name + '" placeholder="' + (p.example || '') + '"></div>';
+      });
+    }
+    if (op.bodyTemplate) {
+      bodyParamsDiv.innerHTML = '<strong>Body (JSON)</strong>';
+      if (op.id === 'messages-send') {
+        bodyParamsDiv.innerHTML += '<div style="margin-top:0.25rem;"><label>Phone numbers (one per line or comma-separated)</label><textarea data-body-key="phoneNumbers" rows="2" placeholder="+48123456789"></textarea></div>';
+        bodyParamsDiv.innerHTML += '<div style="margin-top:0.25rem;"><label>Message text</label><textarea data-body-key="textMessage.text" rows="2" placeholder="Hello"></textarea></div>';
+      } else if (op.id === 'webhooks-add') {
+        bodyParamsDiv.innerHTML += '<div style="margin-top:0.25rem;"><label>URL</label><input type="url" data-body-key="url" placeholder="https://your-server.com/webhook"></div>';
+        bodyParamsDiv.innerHTML += '<div style="margin-top:0.25rem;"><label>Event</label><input type="text" data-body-key="event" placeholder="sms:received" value="sms:received"></div>';
+      } else if (op.id === 'settings-patch') {
+        bodyParamsDiv.innerHTML += '<div style="margin-top:0.25rem;"><label>JSON body (e.g. {"key": "value"})</label><textarea data-body-raw rows="4" placeholder="{}"></textarea></div>';
+      }
+    }
+  }
+
+  function getPath() {
+    var op = getSelectedOp();
+    var path = op.path;
+    if (op.pathParams) {
+      op.pathParams.forEach(function(p) {
+        var inp = pathParamsDiv.querySelector('[data-path-param="' + p.name + '"]');
+        var val = inp ? inp.value.trim() : '';
+        path = path.replace(':' + p.name, val);
+      });
+    }
+    return path;
+  }
+
+  function getQueryString() {
+    var op = getSelectedOp();
+    var q = [];
+    if (op.queryParams) {
+      op.queryParams.forEach(function(p) {
+        var inp = queryParamsDiv.querySelector('[data-query-param="' + p.name + '"]');
+        var val = inp ? inp.value.trim() : '';
+        if (val) q.push(encodeURIComponent(p.name) + '=' + encodeURIComponent(val));
+      });
+    }
+    return q.length ? '?' + q.join('&') : '';
+  }
+
+  function getBody() {
+    var op = getSelectedOp();
+    if (op.body) return JSON.stringify(op.body);
+    if (op.bodyTemplate) {
+      if (op.id === 'messages-send') {
+        var phonesInp = bodyParamsDiv.querySelector('[data-body-key="phoneNumbers"]');
+        var textInp = bodyParamsDiv.querySelector('[data-body-key="textMessage.text"]');
+        var phonesRaw = phonesInp ? phonesInp.value.trim() : '';
+        var phones = phonesRaw.split(/[\n,;]+/).map(function(p) { return p.trim(); }).filter(Boolean);
+        var text = textInp ? textInp.value.trim() : '';
+        return JSON.stringify({ phoneNumbers: phones, textMessage: { text: text } });
+      }
+      if (op.id === 'webhooks-add') {
+        var urlInp = bodyParamsDiv.querySelector('[data-body-key="url"]');
+        var eventInp = bodyParamsDiv.querySelector('[data-body-key="event"]');
+        return JSON.stringify({ url: urlInp ? urlInp.value.trim() : '', event: eventInp ? eventInp.value.trim() : 'sms:received' });
+      }
+      if (op.id === 'settings-patch') {
+        var rawInp = bodyParamsDiv.querySelector('[data-body-raw]');
+        var raw = rawInp ? rawInp.value.trim() : '{}';
+        try { JSON.parse(raw); return raw; } catch (e) { return '{}'; }
+      }
+    }
+    return null;
+  }
+
+  function generate() {
+    var op = getSelectedOp();
+    var base = baseUrl.value.trim().replace(/\/$/, '') || 'https://your-server.com';
+    var path = getPath();
+    var query = getQueryString();
+    var fullUrl = base + path + query;
+    var method = op.method;
+    var auth = op.auth;
+    var body = getBody();
+
+    var curlLines = [];
+    var tokenVar = 'TOKEN';
+
+    if (auth === 'bearer') {
+      curlLines.push('# Step 1: Get token');
+      curlLines.push("curl -s -X POST " + escapeShell(base + "/api/3rdparty/v1/auth/token") + " \\");
+      curlLines.push("  -u " + escapeShell(deviceUser.value.trim() + ':' + devicePass.value) + " \\");
+      curlLines.push("  -H 'Content-Type: application/json' \\");
+      curlLines.push("  -d '{\"scopes\":[\"messages:send\",\"messages:read\",\"messages:list\",\"devices:list\",\"devices:delete\",\"logs:read\",\"webhooks:list\",\"webhooks:write\",\"webhooks:delete\",\"settings:read\",\"settings:write\"],\"ttl\":86400}'");
+      curlLines.push('');
+      curlLines.push('# Step 2: Use the token (replace TOKEN with access_token from step 1 response)');
+      var step2Parts = ["curl -s -X " + method + " " + escapeShell(fullUrl), "  -H 'Authorization: Bearer '${tokenVar}''"];
+      if (body && (method === 'POST' || method === 'PATCH')) {
+        step2Parts.push("  -H 'Content-Type: application/json'");
+        step2Parts.push("  -d " + escapeShell(body));
+      }
+      curlLines.push(step2Parts.join(' \\'));
+      curlLines.push('');
+      curlLines.push('# One-liner (token in variable):');
+      curlLines.push('# TOKEN=$(curl -s -X POST ... -u user:pass -H "Content-Type: application/json" -d \'{"scopes":["messages:send",...],"ttl":86400}\' | jq -r .access_token)');
+      curlLines.push('# curl -s -X ' + method + ' ' + fullUrl + ' -H "Authorization: Bearer $TOKEN"');
+    } else if (auth === 'basic') {
+      curlLines.push("curl -s -X " + method + " " + escapeShell(fullUrl) + " \\");
+      curlLines.push("  -u " + escapeShell(deviceUser.value.trim() + ':' + devicePass.value) + " \\");
+      curlLines.push("  -H 'Content-Type: application/json' \\");
+      curlLines.push("  -d " + escapeShell(body || '{}'));
+    } else {
+      curlLines.push("curl -s -X " + method + " " + escapeShell(fullUrl));
+    }
+
+    outputCurl.value = curlLines.join('\n');
+
+    function escapeJsStr(s) {
+      if (s === null || s === undefined) return "''";
+      return "'" + String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'";
+    }
+    var fetchLines = [];
+    if (auth === 'bearer') {
+      fetchLines.push('const username = ' + escapeJsStr(deviceUser.value.trim()) + ', password = ' + escapeJsStr(devicePass.value) + ';');
+      fetchLines.push("const tokenRes = await fetch('" + base + "/api/3rdparty/v1/auth/token', {");
+      fetchLines.push("  method: 'POST',");
+      fetchLines.push("  headers: { 'Content-Type': 'application/json', 'Authorization': 'Basic ' + btoa(username + ':' + password) },");
+      fetchLines.push("  body: JSON.stringify({ scopes: ['messages:send','messages:read','messages:list','devices:list','devices:delete','logs:read','webhooks:list','webhooks:write','webhooks:delete','settings:read','settings:write'], ttl: 86400 })");
+      fetchLines.push('});');
+      fetchLines.push("const { access_token } = await tokenRes.json();");
+      fetchLines.push('');
+      fetchLines.push("const res = await fetch('" + fullUrl + "', {");
+      fetchLines.push("  method: '" + method + "',");
+      if (body && (method === 'POST' || method === 'PATCH')) {
+        fetchLines.push("  headers: { 'Authorization': 'Bearer ' + access_token, 'Content-Type': 'application/json' },");
+        fetchLines.push("  body: " + (body ? JSON.stringify(JSON.parse(body)) : "undefined"));
+      } else {
+        fetchLines.push("  headers: { 'Authorization': 'Bearer ' + access_token },");
+      }
+      fetchLines.push('});');
+    } else if (auth === 'basic') {
+      fetchLines.push('const username = ' + escapeJsStr(deviceUser.value.trim()) + ', password = ' + escapeJsStr(devicePass.value) + ';');
+      fetchLines.push("const res = await fetch('" + fullUrl + "', {");
+      fetchLines.push("  method: '" + method + "',");
+      fetchLines.push("  headers: { 'Content-Type': 'application/json', 'Authorization': 'Basic ' + btoa(username + ':' + password) },");
+      fetchLines.push("  body: " + (body ? JSON.stringify(JSON.parse(body)) : "'{}'"));
+      fetchLines.push('});');
+    } else {
+      fetchLines.push("const res = await fetch('" + fullUrl + "', { method: '" + method + "' });");
+    }
+    fetchLines.push('const data = await res.json();');
+    fetchLines.push('console.log(data);');
+    outputFetch.value = fetchLines.join('\n');
+  }
+
+  opSelect.addEventListener('change', function() {
+    renderDynamicFields();
+    generate();
+  });
+  document.getElementById('btn_generate').addEventListener('click', function() {
+    renderDynamicFields();
+    generate();
+  });
+  document.getElementById('builder_form').addEventListener('input', function() { generate(); });
+  document.getElementById('builder_form').addEventListener('change', function() { generate(); });
+  document.getElementById('btn_copy_curl').addEventListener('click', function() {
+    outputCurl.select();
+    document.execCommand('copy');
+  });
+  document.getElementById('btn_copy_fetch').addEventListener('click', function() {
+    outputFetch.select();
+    document.execCommand('copy');
+  });
+
+  renderDynamicFields();
+  generate();
+})();
+</script>
+{% endblock %}

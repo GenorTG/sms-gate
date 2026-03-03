@@ -380,6 +380,63 @@ def health_page():
     return render_template("health.html", health_data=health_data, error=error)
 
 
+# --- API Request Builder (copy-pastable curl / fetch) ---
+
+# Operations for the request builder: method, path (with :id placeholders), auth, and param definitions
+API_BUILDER_OPERATIONS = [
+    {
+        "id": "auth-token",
+        "label": "Get JWT token",
+        "method": "POST",
+        "path": "/api/3rdparty/v1/auth/token",
+        "auth": "basic",
+        "body": {"scopes": ["messages:send", "messages:read", "messages:list", "devices:list", "devices:delete", "logs:read", "webhooks:list", "webhooks:write", "webhooks:delete", "settings:read", "settings:write"], "ttl": 86400},
+        "pathParams": [],
+        "queryParams": [],
+    },
+    {"id": "devices-list", "label": "List devices", "method": "GET", "path": "/api/3rdparty/v1/devices", "auth": "bearer", "pathParams": [], "queryParams": []},
+    {"id": "devices-delete", "label": "Delete device", "method": "DELETE", "path": "/api/3rdparty/v1/devices/:id", "auth": "bearer", "pathParams": [{"name": "id", "placeholder": "device ID"}], "queryParams": []},
+    {"id": "messages-list", "label": "List messages", "method": "GET", "path": "/api/3rdparty/v1/messages", "auth": "bearer", "pathParams": [], "queryParams": [{"name": "from", "example": ""}, {"name": "to", "example": ""}, {"name": "limit", "example": "20"}]},
+    {"id": "messages-get", "label": "Get message", "method": "GET", "path": "/api/3rdparty/v1/messages/:id", "auth": "bearer", "pathParams": [{"name": "id", "placeholder": "message ID"}], "queryParams": []},
+    {
+        "id": "messages-send",
+        "label": "Send message",
+        "method": "POST",
+        "path": "/api/3rdparty/v1/messages",
+        "auth": "bearer",
+        "bodyTemplate": {"phoneNumbers": [], "textMessage": {"text": ""}},
+        "pathParams": [],
+        "queryParams": [],
+    },
+    {"id": "logs-list", "label": "List logs", "method": "GET", "path": "/api/3rdparty/v1/logs", "auth": "bearer", "pathParams": [], "queryParams": [{"name": "from", "example": ""}, {"name": "to", "example": ""}]},
+    {"id": "webhooks-list", "label": "List webhooks", "method": "GET", "path": "/api/3rdparty/v1/webhooks", "auth": "bearer", "pathParams": [], "queryParams": []},
+    {
+        "id": "webhooks-add",
+        "label": "Add webhook",
+        "method": "POST",
+        "path": "/api/3rdparty/v1/webhooks",
+        "auth": "bearer",
+        "bodyTemplate": {"url": "", "event": "sms:received"},
+        "pathParams": [],
+        "queryParams": [],
+    },
+    {"id": "webhooks-delete", "label": "Delete webhook", "method": "DELETE", "path": "/api/3rdparty/v1/webhooks/:id", "auth": "bearer", "pathParams": [{"name": "id", "placeholder": "webhook ID"}], "queryParams": []},
+    {"id": "settings-get", "label": "Get settings", "method": "GET", "path": "/api/3rdparty/v1/settings", "auth": "bearer", "pathParams": [], "queryParams": []},
+    {"id": "settings-patch", "label": "Patch settings", "method": "PATCH", "path": "/api/3rdparty/v1/settings", "auth": "bearer", "bodyTemplate": {}, "pathParams": [], "queryParams": []},
+    {"id": "health-ready", "label": "Health ready", "method": "GET", "path": "/health/ready", "auth": "none", "pathParams": [], "queryParams": []},
+]
+
+
+@app.route("/api-builder")
+@login_required
+def api_builder_page():
+    return render_template(
+        "api_builder.html",
+        operations=API_BUILDER_OPERATIONS,
+        default_device_user=session.get("device_user") or "",
+    )
+
+
 # --- Send SMS: page and API (API stays public) ---
 
 
