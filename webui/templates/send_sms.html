@@ -9,8 +9,8 @@
     <input type="text" id="user" name="username" placeholder="e.g. A1B2C3" value="{{ session.get('device_user') or '' }}" required>
     <label for="pass">Device password</label>
     <input type="password" id="pass" name="password" placeholder="From Android app" required>
-    <label for="phone">Phone number (E.164)</label>
-    <input type="text" id="phone" name="phone" placeholder="+48123456789" required>
+    <label for="phone">Recipient(s) — one per line or comma-separated (E.164, e.g. +48123456789)</label>
+    <textarea id="phone" name="phone" placeholder="+48123456789&#10;+48987654321" rows="3" required></textarea>
     <label for="msg">Message</label>
     <textarea id="msg" name="message" required></textarea>
     <button type="submit" class="primary">Send SMS</button>
@@ -25,20 +25,25 @@
     e.preventDefault();
     out.style.display = 'none';
     try {
+      var phoneRaw = document.getElementById('phone').value.trim();
+      var phones = phoneRaw.split(/[\n,;]+/).map(function(p) { return p.trim(); }).filter(Boolean);
+      if (!phones.length) phones = [phoneRaw];
       var r = await fetch('/api/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           username: document.getElementById('user').value.trim(),
           password: document.getElementById('pass').value,
-          phone: document.getElementById('phone').value.trim(),
+          phones: phones,
           message: document.getElementById('msg').value.trim()
         })
       });
       var data = await r.json();
       out.style.display = 'block';
       out.className = 'message ' + (data.success ? 'success' : 'error');
-      out.textContent = data.success ? 'Message enqueued.' : (data.error || JSON.stringify(data));
+      out.textContent = data.success
+        ? (phones.length > 1 ? 'Message enqueued to ' + phones.length + ' recipients.' : 'Message enqueued.')
+        : (data.error || JSON.stringify(data));
     } catch (err) {
       out.style.display = 'block';
       out.className = 'message error';

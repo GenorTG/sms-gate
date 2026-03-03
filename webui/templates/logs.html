@@ -3,7 +3,9 @@
 {% block content %}
 <div class="card">
   <h1>Logs</h1>
-  {% if error %}<p class="message error">{{ error }}</p>{% endif %}
+  {% if logs_unavailable_message %}
+    <p class="message warn">{{ logs_unavailable_message }}</p>
+  {% elif error %}<p class="message error">{{ error }}</p>{% endif %}
   <form method="get" action="{{ url_for('logs_page') }}" style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:1rem;">
     <div>
       <label for="from">From (ISO datetime)</label>

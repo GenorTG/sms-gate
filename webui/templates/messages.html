@@ -28,10 +28,11 @@
 </div>
 <div class="card">
   <h2>Enqueue message</h2>
+  <p class="hint">One recipient per line or comma/semicolon-separated (E.164).</p>
   <form method="post" action="{{ url_for('messages_page') }}">
     <input type="hidden" name="action" value="enqueue">
-    <label for="phone">Phone (E.164)</label>
-    <input type="text" id="phone" name="phone" placeholder="+48123456789" required>
+    <label for="phone">Recipient(s)</label>
+    <textarea id="phone" name="phone" placeholder="+48123456789&#10;+48987654321" rows="2" required></textarea>
     <label for="text">Text</label>
     <textarea id="text" name="text" required></textarea>
     <button type="submit" class="primary">Enqueue</button>

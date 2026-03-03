@@ -15,7 +15,7 @@
       <tr>
         <td>{{ w.get('id') or w.id }}</td>
         <td>{{ w.get('url') or w.url or '-' }}</td>
-        <td>{{ (w.get('events') or w.events or [])|join(', ') or '-' }}</td>
+        <td>{{ w.get('event') or w.event or (w.get('events') or w.events or [])|join(', ') or '-' }}</td>
         <td>
           <form method="post" action="{{ url_for('delete_webhook', webhook_id=w.get('id') or w.id) }}" style="display:inline;" onsubmit="return confirm('Delete this webhook?');">
             <button type="submit" class="btn danger">Delete</button>
@@ -31,13 +31,26 @@
 </div>
 <div class="card">
   <h2>Add webhook</h2>
+  <p class="hint">Select one or more events; one webhook will be registered per event for the same URL. The server will POST the payload to your URL when the event occurs.</p>
   <form method="post" action="{{ url_for('webhooks_page') }}">
     <input type="hidden" name="action" value="add">
-    <label for="url">URL</label>
-    <input type="url" id="url" name="url" required>
-    <label for="events">Events (comma-separated)</label>
-    <input type="text" id="events" name="events" placeholder="sms:received,sms:sent">
-    <button type="submit" class="primary">Add</button>
+    <label for="url">Webhook URL (HTTPS)</label>
+    <input type="url" id="url" name="url" placeholder="https://your-server.com/webhook" required>
+    <label>Events (select at least one)</label>
+    <div class="webhook-events" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:0.5rem;margin:0.5rem 0;">
+      {% for event_id, event_label, payload_fields in webhook_events %}
+      <label class="event-option" style="display:flex;align-items:flex-start;gap:0.5rem;padding:0.4rem;border:1px solid #ddd;border-radius:4px;cursor:pointer;">
+        <input type="checkbox" name="event" value="{{ event_id }}">
+        <span>
+          <strong>{{ event_label }}</strong>
+          <span class="hint" style="display:block;font-size:0.8rem;">{{ event_id }} — payload: {{ payload_fields }}</span>
+        </span>
+      </label>
+      {% endfor %}
+    </div>
+    <label for="device_id">Device ID (optional)</label>
+    <input type="text" id="device_id" name="device_id" placeholder="Leave empty for all devices">
+    <button type="submit" class="primary">Add webhook(s)</button>
   </form>
 </div>
 {% endblock %}

@@ -166,17 +166,24 @@ def messages_page():
         if not user or not passwd:
             session["_messages_error"] = "Set device credentials first."
             return redirect(url_for("messages_page"))
-        phone = (request.form.get("phone") or "").strip()
+        phones_raw = (request.form.get("phone") or "").strip()
         text = (request.form.get("text") or "").strip()
-        if not phone or not text:
+        if not phones_raw or not text:
             session["_messages_error"] = "Phone and text required."
             return redirect(url_for("messages_page"))
-        if not validate_phone(phone):
-            session["_messages_error"] = "Phone must be E.164."
+        phones = [p.strip() for p in re.split(r"[\n,;]+", phones_raw) if p.strip()]
+        if not phones:
+            session["_messages_error"] = "Enter at least one phone number."
             return redirect(url_for("messages_page"))
-        code, data = client_post_message(user, passwd, phone_numbers=[phone], text=text)
+        for p in phones:
+            if not validate_phone(p):
+                session["_messages_error"] = f"Invalid E.164 number: {p}"
+                return redirect(url_for("messages_page"))
+        code, data = client_post_message(user, passwd, phone_numbers=phones, text=text)
         if code in (200, 202):
-            session["_messages_success"] = "Message enqueued."
+            session["_messages_success"] = (
+                f"Message enqueued to {len(phones)} recipient(s)." if len(phones) > 1 else "Message enqueued."
+            )
         else:
             session["_messages_error"] = str(data) if isinstance(data, str) else data.get("message", str(data))
         return redirect(url_for("messages_page"))
@@ -214,6 +221,7 @@ def message_detail(message_id: str):
 def logs_page():
     entries = []
     error = None
+    logs_unavailable_message = None  # Friendly message when cloud/server blocks logs
     user, passwd = get_device_creds()
     if user and passwd:
         from_ts = request.args.get("from") or None
@@ -222,10 +230,28 @@ def logs_page():
         if code == 200 and isinstance(data, list):
             entries = data
         elif isinstance(data, str):
-            error = data
+            if "privacy" in data.lower() or "not accessible" in data.lower() or "not available" in data.lower():
+                logs_unavailable_message = (
+                    "Logs are not available through the Cloud server for device privacy. "
+                    "View logs in the Android app or when using a local server."
+                )
+            else:
+                error = data
         else:
-            error = str(data) if data else f"HTTP {code}"
-    return render_template("logs.html", entries=entries, error=error)
+            raw = str(data) if data else f"HTTP {code}"
+            if "privacy" in raw.lower() or "not accessible" in raw.lower():
+                logs_unavailable_message = (
+                    "Logs are not available through the Cloud server for device privacy. "
+                    "View logs in the Android app or when using a local server."
+                )
+            else:
+                error = raw
+    return render_template(
+        "logs.html",
+        entries=entries,
+        error=error,
+        logs_unavailable_message=logs_unavailable_message,
+    )
 
 
 @app.route("/webhooks", methods=["GET", "POST"])
@@ -240,19 +266,30 @@ def webhooks_page():
             session["_webhooks_error"] = "Set device credentials first."
             return redirect(url_for("webhooks_page"))
         url_val = (request.form.get("url") or "").strip()
-        events_str = (request.form.get("events") or "").strip()
         if not url_val:
             session["_webhooks_error"] = "URL required."
             return redirect(url_for("webhooks_page"))
-        events = [e.strip() for e in events_str.split(",") if e.strip()] if events_str else []
-        payload = {"url": url_val}
-        if events:
-            payload["events"] = events
-        code, data = post_webhook(user, passwd, payload)
-        if code in (200, 201):
-            session["_webhooks_success"] = "Webhook added."
-        else:
-            session["_webhooks_error"] = str(data) if isinstance(data, str) else data.get("message", str(data)) if isinstance(data, dict) else str(data)
+        # API accepts one event per webhook; get list of selected event names
+        selected_events = request.form.getlist("event") or []
+        selected_events = [e.strip() for e in selected_events if e.strip()]
+        device_id = (request.form.get("device_id") or "").strip() or None
+        if not selected_events:
+            session["_webhooks_error"] = "Select at least one event."
+            return redirect(url_for("webhooks_page"))
+        added = 0
+        for event_name in selected_events:
+            payload = {"url": url_val, "event": event_name}
+            if device_id:
+                payload["device_id"] = device_id
+            code, data = post_webhook(user, passwd, payload)
+            if code in (200, 201):
+                added += 1
+            else:
+                err = str(data) if isinstance(data, str) else (data.get("message", str(data)) if isinstance(data, dict) else str(data))
+                session["_webhooks_error"] = f"Event {event_name}: {err}"
+                return redirect(url_for("webhooks_page"))
+        if added:
+            session["_webhooks_success"] = f"Added {added} webhook(s)."
         return redirect(url_for("webhooks_page"))
     if user and passwd:
         code, data = get_webhooks(user, passwd)
@@ -262,7 +299,23 @@ def webhooks_page():
             error = data
         else:
             error = str(data) if data else f"HTTP {code}"
-    return render_template("webhooks.html", webhooks=webhooks, error=error, success=success)
+    # Event picker: id, label, short payload description (per docs.sms-gate.app)
+    webhook_events = [
+        ("sms:received", "SMS received", "messageId, message, sender, recipient, receivedAt"),
+        ("sms:data-received", "SMS data received", "messageId, data (base64), sender, receivedAt"),
+        ("mms:received", "MMS received", "messageId, subject, size, sender, receivedAt"),
+        ("sms:sent", "SMS sent", "messageId, recipient, sender, sentAt, partsCount"),
+        ("sms:delivered", "SMS delivered", "messageId, recipient, deliveredAt"),
+        ("sms:failed", "SMS failed", "messageId, recipient, reason, failedAt"),
+        ("system:ping", "System ping", "health (healthcheck status)"),
+    ]
+    return render_template(
+        "webhooks.html",
+        webhooks=webhooks,
+        error=error,
+        success=success,
+        webhook_events=webhook_events,
+    )
 
 
 @app.route("/webhooks/<webhook_id>/delete", methods=["POST"])
@@ -343,34 +396,43 @@ def validate_phone(phone: str) -> bool:
 @app.route("/api/send", methods=["POST"])
 def api_send():
     """
-    Public endpoint: JSON or form with username, password (device), phone, message.
-    Unchanged for Zapier/scripts.
+    Public endpoint: JSON or form with username, password (device), phone/phones, message.
+    Accepts single "phone" or "phones" (array or comma/newline/semicolon-separated).
     """
     if request.is_json:
         data = request.get_json() or {}
         username = (data.get("username") or "").strip()
         password = data.get("password") or ""
-        phone = (data.get("phone") or "").strip()
         message = (data.get("message") or "").strip()
+        phone = (data.get("phone") or "").strip()
+        raw_phones = data.get("phones")
+        if raw_phones is None:
+            phones = [p.strip() for p in re.split(r"[\n,;]+", phone) if p.strip()] if phone else []
+        elif isinstance(raw_phones, str):
+            phones = [p.strip() for p in re.split(r"[\n,;]+", raw_phones) if p.strip()]
+        else:
+            phones = [str(p).strip() for p in raw_phones if str(p).strip()]
     else:
         username = (request.form.get("username") or "").strip()
         password = request.form.get("password") or ""
-        phone = (request.form.get("phone") or "").strip()
         message = (request.form.get("message") or "").strip()
+        phone = (request.form.get("phone") or "").strip()
+        phones = [p.strip() for p in re.split(r"[\n,;]+", phone) if p.strip()]
 
     if not username:
         return jsonify({"success": False, "error": "username is required"}), 400
     if not password:
         return jsonify({"success": False, "error": "password is required"}), 400
-    if not phone:
-        return jsonify({"success": False, "error": "phone is required"}), 400
+    if not phones:
+        return jsonify({"success": False, "error": "phone or phones is required"}), 400
     if not message:
         return jsonify({"success": False, "error": "message is required"}), 400
-    if not validate_phone(phone):
-        return jsonify({"success": False, "error": "phone must be E.164 (e.g. +48123456789)"}), 400
+    for p in phones:
+        if not validate_phone(p):
+            return jsonify({"success": False, "error": f"phone must be E.164: {p}"}), 400
 
     status, body = client_post_message(
-        username, password, phone_numbers=[phone], text=message
+        username, password, phone_numbers=phones, text=message
     )
     if status == 202:
         return jsonify({"success": True, **body} if isinstance(body, dict) else {"success": True}), status
